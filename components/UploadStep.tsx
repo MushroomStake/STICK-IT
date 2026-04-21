@@ -1,4 +1,4 @@
-import React, { useRef } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 
 type UploadedFile = {
   id: string;
@@ -21,16 +21,41 @@ interface UploadStepProps {
   onUpdateQuantity: (id: string, delta: number) => void;
   onCustomize: (id: string) => void;
   errors?: string[];
+  stickersRemaining?: number;
+  onChooseOtherDeal?: () => void;
 }
 
-export default function UploadStep({ files, onAddFiles, onRemoveFile, onToggleRemoveBackground, onToggleBorder, onUpdateQuantity, onCustomize, errors }: UploadStepProps) {
+export default function UploadStep({ files, onAddFiles, onRemoveFile, onToggleRemoveBackground, onToggleBorder, onUpdateQuantity, onCustomize, errors, stickersRemaining = 0, onChooseOtherDeal }: UploadStepProps) {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [showModal, setShowModal] = useState(false);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!toastMessage) return;
+    const t = setTimeout(() => setToastMessage(null), 3000);
+    return () => clearTimeout(t);
+  }, [toastMessage]);
 
   function triggerInput() {
+    if (stickersRemaining <= 0) {
+      setShowModal(true);
+      return;
+    }
     fileInputRef.current?.click();
   }
 
   function handleInput(e: React.ChangeEvent<HTMLInputElement>) {
+    if (stickersRemaining <= 0) {
+      setShowModal(true);
+      e.currentTarget.value = '';
+      return;
+    }
+
+    const selected = e.target.files;
+    if (selected && selected.length > stickersRemaining) {
+      setToastMessage(`You can only upload ${stickersRemaining} more file(s) for this deal.`);
+    }
+
     onAddFiles(e.target.files);
     // reset so same file can be re-selected
     e.currentTarget.value = '';
@@ -38,6 +63,17 @@ export default function UploadStep({ files, onAddFiles, onRemoveFile, onToggleRe
 
   function handleDrop(e: React.DragEvent) {
     e.preventDefault();
+    if (stickersRemaining <= 0) {
+      // disable drop entirely when no slots remain
+      setToastMessage('No stickers remaining for this deal.');
+      return;
+    }
+
+    const dropped = e.dataTransfer.files;
+    if (dropped && dropped.length > stickersRemaining) {
+      setToastMessage(`You can only upload ${stickersRemaining} more file(s) for this deal.`);
+    }
+
     onAddFiles(e.dataTransfer.files);
   }
 
@@ -66,9 +102,41 @@ export default function UploadStep({ files, onAddFiles, onRemoveFile, onToggleRe
         <div className="text-sm text-gray-500 mt-2">PNG, JPG or WebP (Max 15MB)</div>
       </div>
 
+      {/* Stickers remaining badge */}
+      <div className="mt-3 flex justify-end">
+        <div className={`text-sm px-3 py-1 rounded-full ${stickersRemaining > 0 ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+          Stickers remaining: {stickersRemaining}
+        </div>
+      </div>
+
+      {/* Toast */}
+      {toastMessage && (
+        <div className="fixed top-4 right-4 z-50">
+          <div className="bg-black text-white px-4 py-2 rounded-md shadow">{toastMessage}</div>
+        </div>
+      )}
+
+      {/* Modal: suggest other deals when user persists to add more */}
+      {showModal && (
+        <div className="fixed inset-0 flex items-center justify-center" style={{ zIndex: 9999 }}>
+          <div className="absolute inset-0 bg-black opacity-40" onClick={() => setShowModal(false)} style={{ zIndex: 9999 }} />
+          <div className="bg-white rounded-xl p-6 max-w-sm w-full shadow-lg" style={{ zIndex: 10000 }}>
+            <h3 className="text-lg font-semibold mb-2">Oops — limit reached</h3>
+            <p className="text-sm text-gray-600 mb-4">You've reached the maximum stickers allowed for this deal. You can choose a larger deal to add more stickers.</p>
+            <div className="flex gap-3 justify-end">
+              <button onClick={() => setShowModal(false)} className="px-4 py-2 rounded-md border">Cancel</button>
+              <button onClick={() => { setShowModal(false); onChooseOtherDeal?.(); }} className="px-4 py-2 rounded-md bg-[#FFD600] font-semibold">Choose other deal</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="mt-6">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-semibold">Uploaded Images</h3>
+          <div>
+            <h3 className="text-lg font-semibold">Uploaded Images</h3>
+            <div className="text-sm text-gray-500">Stickers remaining: {stickersRemaining}</div>
+          </div>
           <div className="bg-gray-800 text-white text-xs rounded-full px-3 py-1">{files.length} Files</div>
         </div>
 
