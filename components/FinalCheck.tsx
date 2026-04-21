@@ -36,8 +36,26 @@ export default function FinalCheck({ deal, files, reservationName, onReservation
   return (
     <section className="w-full">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold">Final Check</h1>
+        <h1 className="text-2xl font-bold">Review your order</h1>
         <p className="text-sm text-gray-600 mt-2">Review your order details and provide your name for the reservation.</p>
+
+        <div className="mt-4">
+          <label className="flex items-center justify-between mb-2">
+            <span className="font-semibold">RESERVATION NAME</span>
+            <span className="text-xs text-red-500">Required</span>
+          </label>
+          <div className="relative">
+            <div className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
+              <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+            </div>
+            <input
+              value={reservationName ?? ''}
+              onChange={(e) => onReservationChange?.(e.target.value)}
+              placeholder="Enter your full name"
+              className="w-full pl-12 pr-4 py-3 border rounded-md outline-none focus:ring-2 focus:ring-yellow-200"
+            />
+          </div>
+        </div>
       </div>
 
       <div className="bg-[#FFF6E0] rounded-2xl p-6 shadow-sm mb-6 ring-1 ring-yellow-100">
@@ -105,23 +123,7 @@ export default function FinalCheck({ deal, files, reservationName, onReservation
         </div>
       </div>
 
-      <div className="mb-6">
-        <label className="flex items-center justify-between mb-2">
-          <span className="font-semibold">RESERVATION NAME</span>
-          <span className="text-xs text-red-500">Required</span>
-        </label>
-        <div className="relative">
-          <div className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
-            <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-          </div>
-          <input
-            value={reservationName ?? ''}
-            onChange={(e) => onReservationChange?.(e.target.value)}
-            placeholder="Enter your full name"
-            className="w-full pl-12 pr-4 py-3 border rounded-md outline-none focus:ring-2 focus:ring-yellow-200"
-          />
-        </div>
-      </div>
+      
 
       <div className="mb-24">
         <h4 className="text-sm font-semibold mb-2">PICKUP INFORMATION</h4>

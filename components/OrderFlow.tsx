@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/router';
 import UploadStep from './UploadStep';
 import FinalCheck from './FinalCheck';
@@ -75,7 +75,18 @@ export default function OrderFlow() {
   const [reservationName, setReservationName] = useState<string>('');
   const [processingOrder, setProcessingOrder] = useState(false);
   const [orderId, setOrderId] = useState<string | null>(null);
-  const [orderError, setOrderError] = useState<string | null>(null);
+  // server-side / transient order errors are shown in a modal now
+  const [showServerErrorModal, setShowServerErrorModal] = useState<boolean>(false);
+  const [serverErrorMessage, setServerErrorMessage] = useState<string>('');
+  const [highlightQrCheckbox, setHighlightQrCheckbox] = useState<boolean>(false);
+  const [direction, setDirection] = useState<'left' | 'right'>('left');
+  const [prevStep, setPrevStep] = useState<number | null>(null);
+  const [isAnimating, setIsAnimating] = useState<boolean>(false);
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const timerRef = useRef<number | null>(null);
+  const ANIM_MS = 320;
+  const [showNoReservationModal, setShowNoReservationModal] = useState<boolean>(false);
+  const [showReviewConfirm, setShowReviewConfirm] = useState<boolean>(false);
 
   const STORAGE_KEY = 'stickit_orderflow_state_v1';
 
@@ -87,7 +98,15 @@ export default function OrderFlow() {
       if (!raw) return;
       const parsed = JSON.parse(raw);
       if (parsed) {
-        if (typeof parsed.step === 'number') setStep(parsed.step);
+        // Do not restore the final completed step (5). If a saved state
+        // contains step 5, clear it so future flows start fresh.
+        if (typeof parsed.step === 'number') {
+          if (parsed.step === 5) {
+            try { localStorage.removeItem(STORAGE_KEY); } catch (e) { /* ignore */ }
+          } else {
+            setStep(parsed.step);
+          }
+        }
         if (typeof parsed.selectedDeal === 'string') setSelectedDeal(parsed.selectedDeal);
         if (typeof parsed.reservationName === 'string') setReservationName(parsed.reservationName);
         if (parsed.qrValue) setQrValue(parsed.qrValue);
@@ -159,6 +178,13 @@ export default function OrderFlow() {
   useEffect(() => {
     try {
       if (typeof window === 'undefined') return;
+      // If we've reached the final step, clear any persisted state and
+      // avoid saving the completed state. This ensures returning users
+      // start a fresh flow instead of being restored to step 5.
+      if (step === 5) {
+        try { localStorage.removeItem(STORAGE_KEY); } catch (e) { /* ignore */ }
+        return;
+      }
       const sanitized = uploadedFiles.map((f) => ({
         id: f.id,
         name: f.name,
@@ -204,6 +230,16 @@ export default function OrderFlow() {
       setUploadErrors((prev) => (prev || []).filter((p) => p !== exceedMsg));
     }
   }, [selectedDeal, uploadedFiles]);
+
+  // cleanup any pending animation timers on unmount
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) {
+        window.clearTimeout(timerRef.current);
+        timerRef.current = null;
+      }
+    };
+  }, []);
 
   const MAX_FILE_SIZE = 15 * 1024 * 1024; // 15MB
   const ALLOWED_TYPES = ['image/png', 'image/jpeg', 'image/webp'];
@@ -404,13 +440,25 @@ export default function OrderFlow() {
         return;
       }
 
-      // generate QR value when advancing from review (step 3) to payment/qr (step 4)
-      const code = `STICKIT-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
-      setQrValue(code);
-      setQrSaved(false);
+      // require reservation name before proceeding
+      if (!reservationName || reservationName.trim().length < 2) {
+        const msg = 'Please enter the reservation name (at least 2 characters).';
+        setUploadErrors((prev) => {
+          if (prev && prev.includes(msg)) return prev;
+          return [...(prev || []), msg];
+        });
+        setShowNoReservationModal(true);
+        return;
+      }
+
+      // show confirmation modal before moving to payment
+      setShowReviewConfirm(true);
+      return;
     }
 
-    if (step < 5) setStep((s) => s + 1);
+    if (step < 5) {
+      goToStep(step + 1);
+    }
     else {
       // Finalize (placeholder)
       alert('Order completed (placeholder)');
@@ -419,14 +467,37 @@ export default function OrderFlow() {
 
   async function handlePurchase() {
     if (processingOrder) return;
-    setOrderError(null);
+    // Ensure user confirmed they've saved the QR code. If not, navigate/focus checkbox.
+    if (!qrSaved) {
+      try {
+        const el = document.getElementById('qr-saved-checkbox');
+        // visually highlight the checkbox and scroll to it
+        setHighlightQrCheckbox(true);
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          setTimeout(() => {
+            try { (el as HTMLElement).focus(); } catch (e) { /* ignore */ }
+            // clear highlight after a short delay
+            setTimeout(() => setHighlightQrCheckbox(false), 1600);
+          }, 300);
+        } else {
+          // if element not found, remove highlight after timeout
+          setTimeout(() => setHighlightQrCheckbox(false), 1600);
+        }
+      } catch (e) {
+        // ignore
+      }
+      return;
+    }
     const dealCount = getDealCount();
     if (totalQuantity() > dealCount) {
-      setOrderError(`Total stickers (${totalQuantity()}) exceed selected deal limit (${dealCount}). Reduce quantities or choose a larger deal.`);
+      // use the existing over-limit modal rather than an inline message
+      setShowOverLimitModal(true);
       return;
     }
     if (!reservationName || reservationName.trim().length < 2) {
-      setOrderError('Please enter the reservation name');
+      // prompt the reservation modal instead of an inline error
+      setShowNoReservationModal(true);
       return;
     }
 
@@ -449,16 +520,21 @@ export default function OrderFlow() {
       });
       const json = await res.json();
       if (!res.ok) {
-        setOrderError(json?.error || 'Failed to create order');
+        setServerErrorMessage(json?.error || 'Failed to create order');
+        setShowServerErrorModal(true);
         setProcessingOrder(false);
         return;
       }
 
       setOrderId(json.orderId ?? null);
-      setStep(5);
+      goToStep(5);
+      // Clear in-memory order state so future flows start fresh.
+      // Use a short timeout to allow the Thank You UI to render first.
+      setTimeout(() => clearInMemoryState(), 120);
     } catch (err) {
       console.error(err);
-      setOrderError('Failed to create order');
+      setServerErrorMessage('Failed to create order');
+      setShowServerErrorModal(true);
     } finally {
       setProcessingOrder(false);
     }
@@ -474,8 +550,67 @@ export default function OrderFlow() {
   }
 
   function back() {
-    if (step > 1) setStep((s) => s - 1);
-    else cancel();
+    if (step > 1) {
+      goToStep(step - 1);
+    } else cancel();
+  }
+
+  function goToStep(target: number) {
+    if (target === step) return;
+    if (isAnimating) return; // avoid interrupting an in-progress animation
+
+    const newDirection = target > step ? 'left' : 'right';
+    setDirection(newDirection);
+
+    // prepare for animation: capture previous step and lock container height
+    const container = containerRef.current;
+    if (container) {
+      const h = container.getBoundingClientRect().height;
+      container.style.height = `${h}px`;
+    }
+
+    setPrevStep(step);
+    setIsAnimating(true);
+
+    // switch to new step
+    setStep(target);
+
+    // clear any existing timer
+    if (timerRef.current) {
+      window.clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+
+    // after animation completes, cleanup
+    timerRef.current = window.setTimeout(() => {
+      setPrevStep(null);
+      setIsAnimating(false);
+      if (container) container.style.height = '';
+      timerRef.current = null;
+    }, ANIM_MS + 40);
+  }
+
+  function clearInMemoryState() {
+    try {
+      // revoke any blob object URLs to free memory
+      uploadedFiles.forEach((f) => {
+        if (f.previewUrl && typeof f.previewUrl === 'string' && f.previewUrl.startsWith('blob:')) {
+          try { URL.revokeObjectURL(f.previewUrl); } catch (e) { /* ignore */ }
+        }
+      });
+    } catch (e) {
+      // ignore
+    }
+
+    setUploadedFiles([]);
+    setReservationName('');
+    setSelectedDeal('standard');
+    setQrValue(null);
+    setQrSaved(false);
+    setOrderId(null);
+    setUploadErrors([]);
+    setHighlightQrCheckbox(false);
+    setProcessingOrder(false);
   }
 
   const isOverLimit = totalQuantity() > getDealCount();
@@ -493,6 +628,124 @@ export default function OrderFlow() {
     // If files were added, ensure the "no files" modal is hidden.
     if (uploadedFiles.length > 0 && showNoFilesModal) setShowNoFilesModal(false);
   }, [uploadedFiles.length, showNoFilesModal]);
+
+  useEffect(() => {
+    // clear any temporary highlight when the user actually checks the box
+    if (qrSaved) setHighlightQrCheckbox(false);
+  }, [qrSaved]);
+
+  const confirmDeal = DEALS.find((d) => d.id === selectedDeal) ?? null;
+
+  function renderStep(s: number | null) {
+    if (s === 1) return (
+      <div className="mb-4">
+        <div className="flex items-center justify-between mb-2">
+          <div>
+            <h3 className="text-xl font-semibold">Recommended Deals</h3>
+            <p className="text-sm text-gray-500">Choose the package that fits your needs. You can upload custom designs in the next step.</p>
+          </div>
+        </div>
+
+        <div className="space-y-4 mt-4">
+          {DEALS.map((deal) => {
+            const selected = selectedDeal === deal.id;
+            return (
+              <button
+                key={deal.id}
+                onClick={() => setSelectedDeal(deal.id)}
+                className={`w-full text-left p-4 rounded-2xl flex items-start gap-4 border ${selected ? 'border-yellow-400 bg-yellow-50 shadow-lg' : 'border-gray-200 bg-white'} `}
+                aria-pressed={selected}
+              >
+                <div className="flex-1">
+                  <div className="flex items-center justify-between">
+                    <div className="text-xs font-semibold text-gray-500">{deal.tag}</div>
+                    <div className="text-sm font-bold">₱{deal.price} <span className="text-xs text-gray-400">total</span></div>
+                  </div>
+                  <div className="mt-2 flex items-baseline justify-between">
+                    <div>
+                      <div className="text-2xl font-bold">{deal.title}</div>
+                      <div className="text-sm text-gray-500 mt-2">{deal.description}</div>
+                    </div>
+                    {deal.best && (
+                      <div className="ml-4 text-xs bg-yellow-200 text-yellow-800 px-2 py-1 rounded-full">best value</div>
+                    )}
+                  </div>
+                </div>
+                <div className="flex items-center">
+                  <div className={`w-5 h-5 rounded-full border ${selected ? 'bg-yellow-400 border-yellow-400' : 'bg-white border-gray-300'}`} />
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    );
+
+    if (s === 2) return (
+      <UploadStep
+        files={uploadedFiles}
+        onAddFiles={handleAddFiles}
+        onRemoveFile={removeFile}
+        onToggleRemoveBackground={toggleRemoveBackground}
+        onToggleBorder={toggleBorder}
+        onUpdateQuantity={updateQuantity}
+        onCustomize={handleCustomize}
+        errors={uploadErrors}
+        stickersRemaining={Math.max(0, getDealCount() - totalQuantity())}
+        onChooseOtherDeal={() => goToStep(1)}
+      />
+    );
+
+    if (s === 3) return (
+      <FinalCheck
+        deal={DEALS.find((d) => d.id === selectedDeal) ?? null}
+        files={uploadedFiles}
+        reservationName={reservationName}
+        onReservationChange={setReservationName}
+      />
+    );
+
+    if (s === 4) return (
+      <QRCodeStep value={qrValue} onSaved={(v) => setQrSaved(v)} highlight={highlightQrCheckbox} />
+    );
+
+    if (s === 5) return (
+      <ThankYouStep onBack={() => router.push('/user')} />
+    );
+
+    return null;
+  }
+
+  // Reusable modal wrapper with fade in/out animations on mount/unmount
+  function Modal({ visible, onClose, children, dialogClass = 'relative z-10 w-full max-w-md sm:max-w-lg mx-4' }: { visible: boolean; onClose?: () => void; children: any; dialogClass?: string }) {
+    const [rendered, setRendered] = useState<boolean>(visible);
+    const [closing, setClosing] = useState<boolean>(false);
+
+    useEffect(() => {
+      if (visible) {
+        setRendered(true);
+        setClosing(false);
+      } else if (rendered) {
+        setClosing(true);
+        const t = setTimeout(() => {
+          setRendered(false);
+          setClosing(false);
+        }, 260);
+        return () => clearTimeout(t);
+      }
+    }, [visible]);
+
+    if (!rendered) return null;
+
+    return (
+      <div className={`fixed inset-0 z-[9999] flex items-center justify-center ${closing ? 'modal-closing' : 'modal-opening'}`}>
+        <div className="absolute inset-0 modal-overlay" aria-hidden="true" onClick={() => onClose?.()} />
+        <div role="dialog" aria-modal="true" className={`${dialogClass} modal-dialog`}>
+          {children}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="w-full pb-[calc(5rem+env(safe-area-inset-bottom))] sm:pb-0">
@@ -527,127 +780,146 @@ export default function OrderFlow() {
         </div>
       </div>
 
-      {showOverLimitModal && (
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center">
-          <div className="absolute inset-0 bg-black/50" aria-hidden="true" />
-          <div role="dialog" aria-modal="true" className="relative z-10 w-full max-w-md sm:max-w-lg mx-4">
-            <div className="bg-yellow-50 border border-yellow-200 rounded-lg shadow-xl p-6 sm:p-8">
-              <div className="flex flex-col items-center gap-6 text-center">
-                <div className="w-full">
-                  <h3 className="text-lg font-semibold text-yellow-800">Deal limit exceeded</h3>
-                  <p className="mt-3 text-sm text-yellow-700 mx-auto max-w-[40ch]">You currently have {totalQuantity()} stickers but the selected deal allows {getDealCount()}. Reduce quantities or choose a larger deal before purchasing.</p>
-                </div>
+      <Modal visible={showOverLimitModal} onClose={() => setShowOverLimitModal(false)}>
+        <div className="bg-yellow-50 border border-yellow-200 rounded-lg shadow-xl p-6 sm:p-8">
+          <div className="flex flex-col items-center gap-6 text-center">
+            <div className="w-full">
+              <h3 className="text-lg font-semibold text-yellow-800">Deal limit exceeded</h3>
+              <p className="mt-3 text-sm text-yellow-700 mx-auto max-w-[40ch]">You currently have {totalQuantity()} stickers but the selected deal allows {getDealCount()}. Reduce quantities or choose a larger deal before purchasing.</p>
+            </div>
 
-                <div className="w-full flex justify-center mt-2">
-                  <div className="flex gap-3 w-full max-w-lg px-4 sm:px-0">
-                    <button onClick={() => { setShowOverLimitModal(false); setStep(2); }} className="flex-1 px-4 py-2 rounded-md border bg-white">Adjust files</button>
-                    <button onClick={() => { setShowOverLimitModal(false); setStep(1); }} className="flex-1 px-4 py-2 rounded-md bg-yellow-400 font-semibold">Choose other deal</button>
-                  </div>
-                </div>
+            <div className="w-full flex justify-center mt-2">
+              <div className="flex flex-col sm:flex-row gap-3 w-full max-w-lg px-4 sm:px-0">
+                <button onClick={() => { setShowOverLimitModal(false); goToStep(2); }} className="w-full sm:w-auto px-4 py-2 rounded-md border bg-white">Adjust files</button>
+                <button onClick={() => { setShowOverLimitModal(false); goToStep(1); }} className="w-full sm:w-auto px-4 py-2 rounded-md bg-yellow-400 font-semibold">Choose other deal</button>
               </div>
             </div>
           </div>
         </div>
-      )}
+      </Modal>
 
-      {showNoFilesModal && (
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center">
-          <div className="absolute inset-0 bg-black/50" aria-hidden="true" />
-          <div role="dialog" aria-modal="true" className="relative z-10 w-full max-w-md sm:max-w-lg mx-4">
-            <div className="bg-yellow-50 border border-yellow-200 rounded-lg shadow-xl p-6 sm:p-8">
-              <div className="flex flex-col items-center gap-6 text-center">
-                <div className="w-full">
-                  <h3 className="text-lg font-semibold text-yellow-800">No files uploaded</h3>
-                  <p className="mt-3 text-sm text-yellow-700 mx-auto max-w-[40ch]">You haven't uploaded any designs. Please upload at least one file to continue to the Review step.</p>
-                </div>
+      <Modal visible={showNoFilesModal} onClose={() => setShowNoFilesModal(false)}>
+        <div className="bg-yellow-50 border border-yellow-200 rounded-lg shadow-xl p-6 sm:p-8">
+          <div className="flex flex-col items-center gap-6 text-center">
+            <div className="w-full">
+              <h3 className="text-lg font-semibold text-yellow-800">No files uploaded</h3>
+              <p className="mt-3 text-sm text-yellow-700 mx-auto max-w-[40ch]">You haven't uploaded any designs. Please upload at least one file to continue to the Review step.</p>
+            </div>
 
-                <div className="w-full flex justify-center mt-2">
-                  <div className="flex gap-3 w-full max-w-lg px-4 sm:px-0">
-                    <button onClick={() => setShowNoFilesModal(false)} className="flex-1 px-4 py-2 rounded-md border bg-white">Upload files</button>
-                    <button onClick={() => { setShowNoFilesModal(false); setStep(1); }} className="flex-1 px-4 py-2 rounded-md bg-yellow-400 font-semibold">Choose other deal</button>
-                  </div>
-                </div>
+            <div className="w-full flex justify-center mt-2">
+              <div className="flex flex-col sm:flex-row gap-3 w-full max-w-lg px-4 sm:px-0">
+                <button onClick={() => setShowNoFilesModal(false)} className="w-full sm:w-auto px-4 py-2 rounded-md border bg-white">Upload files</button>
+                <button onClick={() => { setShowNoFilesModal(false); goToStep(1); }} className="w-full sm:w-auto px-4 py-2 rounded-md bg-yellow-400 font-semibold">Choose other deal</button>
               </div>
             </div>
           </div>
         </div>
-      )}
+      </Modal>
 
-      {step === 1 && (
-        <div className="mb-4">
-          <div className="flex items-center justify-between mb-2">
-            <div>
-              <h3 className="text-xl font-semibold">Recommended Deals</h3>
-              <p className="text-sm text-gray-500">Choose the package that fits your needs. You can upload custom designs in the next step.</p>
+      <Modal visible={showNoReservationModal} onClose={() => setShowNoReservationModal(false)}>
+        <div className="bg-yellow-50 border border-yellow-200 rounded-lg shadow-xl p-6 sm:p-8">
+          <div className="flex flex-col items-center gap-6 text-center">
+            <div className="w-full">
+              <h3 className="text-lg font-semibold text-yellow-800">Reservation name required</h3>
+              <p className="mt-3 text-sm text-yellow-700 mx-auto max-w-[40ch]">Please provide a reservation name so we can hold your order. The name should be at least 2 characters.</p>
+            </div>
+
+            <div className="w-full flex justify-center mt-2">
+              <div className="w-full max-w-lg px-4 sm:px-0">
+                <button onClick={() => setShowNoReservationModal(false)} className="w-full px-4 py-2 rounded-md border bg-white">Enter name</button>
+              </div>
             </div>
           </div>
+        </div>
+      </Modal>
 
-          <div className="space-y-4 mt-4">
-            {DEALS.map((deal) => {
-              const selected = selectedDeal === deal.id;
-              return (
-                <button
-                  key={deal.id}
-                  onClick={() => setSelectedDeal(deal.id)}
-                  className={`w-full text-left p-4 rounded-2xl flex items-start gap-4 border ${selected ? 'border-yellow-400 bg-yellow-50 shadow-lg' : 'border-gray-200 bg-white'} `}
-                  aria-pressed={selected}
-                >
-                  <div className="flex-1">
-                    <div className="flex items-center justify-between">
-                      <div className="text-xs font-semibold text-gray-500">{deal.tag}</div>
-                      <div className="text-sm font-bold">₱{deal.price} <span className="text-xs text-gray-400">total</span></div>
-                    </div>
-                    <div className="mt-2 flex items-baseline justify-between">
-                      <div>
-                        <div className="text-2xl font-bold">{deal.title}</div>
-                        <div className="text-sm text-gray-500 mt-2">{deal.description}</div>
+      <Modal visible={showReviewConfirm} onClose={() => setShowReviewConfirm(false)} dialogClass="relative z-10 w-full max-w-2xl mx-4">
+        <div className="bg-white border border-gray-200 rounded-lg shadow-xl p-6 sm:p-8">
+          <div className="flex flex-col gap-6">
+            <h3 className="text-lg font-semibold">Confirm your order</h3>
+
+            <div className="bg-[#FFF6E0] rounded-2xl p-4 sm:p-6 shadow-sm ring-1 ring-yellow-100">
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex-1">
+                  <div className="text-sm text-gray-600 font-medium">Recommended Deal</div>
+                  <div className="mt-3">
+                    <div className="text-2xl font-extrabold text-gray-900">{confirmDeal?.title}</div>
+                    <div className="text-sm text-gray-600 mt-1">{confirmDeal?.description}</div>
+                  </div>
+                  <div className="mt-4 flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="w-9 h-9 rounded-md bg-white/80 flex items-center justify-center shadow-sm">
+                        <svg className="w-5 h-5 text-yellow-700" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="3" y="3" width="18" height="6" rx="1"/><rect x="3" y="15" width="18" height="6" rx="1"/></svg>
                       </div>
-                      {deal.best && (
-                        <div className="ml-4 text-xs bg-yellow-200 text-yellow-800 px-2 py-1 rounded-full">best value</div>
-                      )}
+                      <div>
+                        <div className="text-sm font-medium text-gray-700">Price per sheet</div>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-lg font-extrabold">₱{(confirmDeal?.price ?? 0).toFixed(2)}</div>
                     </div>
                   </div>
-                  <div className="flex items-center">
-                    <div className={`w-5 h-5 rounded-full border ${selected ? 'bg-yellow-400 border-yellow-400' : 'bg-white border-gray-300'}`} />
-                  </div>
-                </button>
-              );
-            })}
+                </div>
+
+                <div className="pl-2 shrink-0">
+                  <span className="inline-block bg-yellow-200 text-yellow-800 text-sm px-3 py-1 rounded-full font-semibold">Selected</span>
+                </div>
+              </div>
+
+              <div className="mt-6 border-t border-yellow-100 pt-4 grid grid-cols-2 gap-4 text-sm text-gray-700">
+                <div>
+                  <div className="text-xs text-gray-500">Stickers Uploaded</div>
+                  <div className="font-semibold mt-1 text-gray-900">{totalQuantity()} Items</div>
+                </div>
+                <div>
+                  <div className="text-xs text-gray-500">Sheets Required</div>
+                  <div className="font-semibold mt-1 text-gray-900">{Math.max(1, Math.ceil(totalQuantity() / 10))} Full Sheets</div>
+                </div>
+              </div>
+            </div>
+
+            <div className="text-sm text-gray-700">Reservation name: <span className="font-semibold">{reservationName}</span></div>
+
+            <div className="mt-4 w-full">
+              <div className="flex flex-col sm:flex-row gap-3 w-full">
+                <button onClick={() => setShowReviewConfirm(false)} className="w-full sm:w-auto px-4 py-2 rounded-md border bg-white">Cancel</button>
+                <button onClick={() => { 
+                  // generate QR and proceed
+                  const code = `STICKIT-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
+                  setQrValue(code);
+                  setQrSaved(false);
+                  setShowReviewConfirm(false);
+                  goToStep(4);
+                }} className="w-full sm:w-auto px-4 py-2 rounded-md bg-yellow-400 font-semibold">Confirm and proceed</button>
+              </div>
+            </div>
           </div>
         </div>
-      )}
+      </Modal>
 
-      {step === 2 && (
-        <UploadStep
-          files={uploadedFiles}
-          onAddFiles={handleAddFiles}
-          onRemoveFile={removeFile}
-          onToggleRemoveBackground={toggleRemoveBackground}
-          onToggleBorder={toggleBorder}
-          onUpdateQuantity={updateQuantity}
-          onCustomize={handleCustomize}
-            errors={uploadErrors}
-            stickersRemaining={Math.max(0, getDealCount() - totalQuantity())}
-            onChooseOtherDeal={() => setStep(1)}
-        />
-      )}
+      <Modal visible={showServerErrorModal} onClose={() => setShowServerErrorModal(false)}>
+        <div className="bg-white border border-gray-200 rounded-lg shadow-xl p-6 sm:p-8">
+          <div className="flex flex-col gap-4 text-center">
+            <h3 className="text-lg font-semibold text-red-700">Error</h3>
+            <p className="text-sm text-gray-700">{serverErrorMessage}</p>
+            <div className="mt-4">
+              <button onClick={() => setShowServerErrorModal(false)} className="px-4 py-2 rounded-md border bg-white">Close</button>
+            </div>
+          </div>
+        </div>
+      </Modal>
 
-      {step === 3 && (
-        <FinalCheck
-          deal={DEALS.find((d) => d.id === selectedDeal) ?? null}
-          files={uploadedFiles}
-          reservationName={reservationName}
-          onReservationChange={setReservationName}
-        />
-      )}
+      <div ref={containerRef} className={`animated-area overflow-hidden relative ${isAnimating ? 'is-animating' : ''}`}>
+        {prevStep !== null && (
+          <div key={`prev-${prevStep}`} className={`animated-step ${isAnimating ? (direction === 'left' ? 'slide-out-left' : 'slide-out-right') : ''}`}>
+            {renderStep(prevStep)}
+          </div>
+        )}
 
-      {step === 4 && (
-        <QRCodeStep value={qrValue} onSaved={(v) => setQrSaved(v)} />
-      )}
-
-      {step === 5 && (
-        <ThankYouStep onBack={() => router.push('/user')} />
-      )}
+        <div key={`curr-${step}`} className={`animated-step ${isAnimating ? (direction === 'left' ? 'slide-in-right' : 'slide-in-left') : ''}`}>
+          {renderStep(step)}
+        </div>
+      </div>
 
       {step !== 5 && (
         <div className="fixed bottom-4 left-0 right-0 flex justify-center sm:relative sm:bottom-auto sm:left-auto sm:right-auto sm:justify-end" style={{ zIndex: 60 }}>
@@ -655,11 +927,10 @@ export default function OrderFlow() {
           <div className="bg-white p-3 rounded-3xl shadow-lg flex gap-3 items-center">
             <button onClick={back} className="flex-1 bg-white border border-gray-200 rounded-full py-3 font-medium">Go Back</button>
             <div className="flex-1">
-              {orderError && <div className="text-sm text-red-600 mb-2 text-center">{orderError}</div>}
               <button
                 onClick={step === 4 ? handlePurchase : next}
-                disabled={step === 4 ? (!qrSaved || processingOrder) : false}
-                className={`w-full rounded-full py-3 font-semibold ${step === 4 ? 'bg-[#FFD600] text-black' : 'bg-[#FFD600] text-black'}`}
+                disabled={processingOrder}
+                className={`w-full rounded-full py-3 font-semibold bg-[#FFD600] text-black`}
               >
                 {step === 4 ? (processingOrder ? 'Processing...' : 'PURCHASED') : 'Next →'}
               </button>
@@ -668,6 +939,37 @@ export default function OrderFlow() {
         </div>
         </div>
       )}
+      <style jsx>{`
+        .animated-area { overflow: hidden; position: relative; }
+        .animated-step { position: relative; width: 100%; }
+        .animated-area.is-animating .animated-step { position: absolute; top: 0; left: 0; width: 100%; }
+        .slide-in-right { animation: slideInFromRight 320ms cubic-bezier(0.2, 0.8, 0.2, 1); }
+        .slide-in-left { animation: slideInFromLeft 320ms cubic-bezier(0.2, 0.8, 0.2, 1); }
+        .slide-out-left { animation: slideOutToLeft 320ms cubic-bezier(0.2, 0.8, 0.2, 1); }
+        .slide-out-right { animation: slideOutToRight 320ms cubic-bezier(0.2, 0.8, 0.2, 1); }
+        @keyframes slideInFromRight {
+          from { transform: translateX(30%); opacity: 0; }
+          to { transform: translateX(0); opacity: 1; }
+        }
+        @keyframes slideInFromLeft {
+          from { transform: translateX(-30%); opacity: 0; }
+          to { transform: translateX(0); opacity: 1; }
+        }
+        @keyframes slideOutToLeft {
+          from { transform: translateX(0); opacity: 1; }
+          to { transform: translateX(-30%); opacity: 0; }
+        }
+        @keyframes slideOutToRight {
+          from { transform: translateX(0); opacity: 1; }
+          to { transform: translateX(30%); opacity: 0; }
+        }
+        .modal-overlay { background: rgba(0,0,0,0); opacity: 0; transition: opacity 260ms ease; }
+        .modal-dialog { transform-origin: center; opacity: 0; transform: translateY(8px) scale(0.98); transition: opacity 260ms ease, transform 260ms cubic-bezier(0.2,0.8,0.2,1); }
+        .modal-opening .modal-overlay { opacity: 0.5; }
+        .modal-opening .modal-dialog { transform: translateY(0) scale(1); opacity: 1; }
+        .modal-closing .modal-overlay { opacity: 0; }
+        .modal-closing .modal-dialog { transform: translateY(8px) scale(0.98); opacity: 0; }
+      `}</style>
     </div>
   );
 }

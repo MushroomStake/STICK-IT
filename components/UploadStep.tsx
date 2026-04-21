@@ -27,7 +27,6 @@ interface UploadStepProps {
 
 export default function UploadStep({ files, onAddFiles, onRemoveFile, onToggleRemoveBackground, onToggleBorder, onUpdateQuantity, onCustomize, errors, stickersRemaining = 0, onChooseOtherDeal }: UploadStepProps) {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const [showModal, setShowModal] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   useEffect(() => {
@@ -38,7 +37,7 @@ export default function UploadStep({ files, onAddFiles, onRemoveFile, onToggleRe
 
   function triggerInput() {
     if (stickersRemaining <= 0) {
-      setShowModal(true);
+      setToastMessage('You have reached the maximum stickers allowed for this deal.');
       return;
     }
     fileInputRef.current?.click();
@@ -46,7 +45,7 @@ export default function UploadStep({ files, onAddFiles, onRemoveFile, onToggleRe
 
   function handleInput(e: React.ChangeEvent<HTMLInputElement>) {
     if (stickersRemaining <= 0) {
-      setShowModal(true);
+      setToastMessage('You have reached the maximum stickers allowed for this deal.');
       e.currentTarget.value = '';
       return;
     }
@@ -79,15 +78,7 @@ export default function UploadStep({ files, onAddFiles, onRemoveFile, onToggleRe
 
   return (
     <div>
-      {errors && errors.length > 0 && (
-        <div className="mb-4 p-3 bg-red-50 border border-red-100 rounded-md">
-          <ul className="text-sm text-red-700 list-disc pl-5">
-            {errors.map((err, i) => (
-              <li key={i}>{err}</li>
-            ))}
-          </ul>
-        </div>
-      )}
+      {/* Inline error banner removed in favor of modal/toast UX */}
       <div
         onClick={triggerInput}
         onDrop={handleDrop}
@@ -116,20 +107,7 @@ export default function UploadStep({ files, onAddFiles, onRemoveFile, onToggleRe
         </div>
       )}
 
-      {/* Modal: suggest other deals when user persists to add more */}
-      {showModal && (
-        <div className="fixed inset-0 flex items-center justify-center" style={{ zIndex: 9999 }}>
-          <div className="absolute inset-0 bg-black opacity-40" onClick={() => setShowModal(false)} style={{ zIndex: 9999 }} />
-          <div className="bg-white rounded-xl p-6 max-w-sm w-full shadow-lg" style={{ zIndex: 10000 }}>
-            <h3 className="text-lg font-semibold mb-2">Oops — limit reached</h3>
-            <p className="text-sm text-gray-600 mb-4">You've reached the maximum stickers allowed for this deal. You can choose a larger deal to add more stickers.</p>
-            <div className="flex gap-3 justify-end">
-              <button onClick={() => setShowModal(false)} className="px-4 py-2 rounded-md border">Cancel</button>
-              <button onClick={() => { setShowModal(false); onChooseOtherDeal?.(); }} className="px-4 py-2 rounded-md bg-[#FFD600] font-semibold">Choose other deal</button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* UploadStep no longer shows its own modal — parent `OrderFlow` provides the animated modal UX. */}
 
       <div className="mt-6">
         <div className="flex items-center justify-between mb-4">

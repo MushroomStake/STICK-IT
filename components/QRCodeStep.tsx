@@ -4,9 +4,10 @@ type Props = {
   value?: string | null;
   filename?: string;
   onSaved?: (saved: boolean) => void;
+  highlight?: boolean;
 };
 
-export default function QRCodeStep({ value, filename = 'pickup-qr.png', onSaved }: Props) {
+export default function QRCodeStep({ value, filename = 'pickup-qr.png', onSaved, highlight = false }: Props) {
   const [dataUrl, setDataUrl] = useState<string>('');
   const [saved, setSaved] = useState(false);
 
@@ -121,9 +122,10 @@ export default function QRCodeStep({ value, filename = 'pickup-qr.png', onSaved 
       </div>
 
       <div className="mb-28">
-        <label className="flex items-start gap-3 p-3 bg-white rounded-md border border-gray-100">
+        <label className={`flex items-start gap-3 p-3 bg-white rounded-md border ${highlight ? 'ring-4 ring-yellow-300 animate-pulse border-yellow-300' : 'border-gray-100'}`}>
           <input
             type="checkbox"
+            id="qr-saved-checkbox"
             checked={saved}
             onChange={(e) => setSaved(e.target.checked)}
             className="mt-1 h-4 w-4 rounded"
