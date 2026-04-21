@@ -24,9 +24,10 @@ interface FinalCheckProps {
   files: FilePreview[];
   reservationName?: string;
   onReservationChange?: (v: string) => void;
+  highlightReservationName?: boolean;
 }
 
-export default function FinalCheck({ deal, files, reservationName, onReservationChange }: FinalCheckProps) {
+export default function FinalCheck({ deal, files, reservationName, onReservationChange, highlightReservationName = false }: FinalCheckProps) {
 
   const totalStickers = files.reduce((s, f) => s + (f.quantity ?? 1), 0);
   const itemsPerSheet = 10;
@@ -49,10 +50,11 @@ export default function FinalCheck({ deal, files, reservationName, onReservation
               <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
             </div>
             <input
+              id="reservation-name-input"
               value={reservationName ?? ''}
               onChange={(e) => onReservationChange?.(e.target.value)}
               placeholder="Enter your full name"
-              className="w-full pl-12 pr-4 py-3 border rounded-md outline-none focus:ring-2 focus:ring-yellow-200"
+              className={`w-full pl-12 pr-4 py-3 border rounded-md outline-none focus:ring-2 focus:ring-yellow-200 ${highlightReservationName ? 'ring-4 ring-yellow-300 animate-pulse border-yellow-300' : ''}`}
             />
           </div>
         </div>
@@ -110,7 +112,8 @@ export default function FinalCheck({ deal, files, reservationName, onReservation
             return (
               <div key={f.id} className="relative w-16 h-16 rounded-md bg-gray-100 overflow-hidden flex-shrink-0">
                 {src ? (
-                  <div className="absolute inset-0 bg-center bg-cover" style={{ backgroundImage: `url("${src}")` }} />
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={src} alt={f.name ?? 'preview'} className="absolute inset-0 w-full h-full object-cover" />
                 ) : (
                   <div className="w-full h-full flex items-center justify-center text-gray-400">No preview</div>
                 )}

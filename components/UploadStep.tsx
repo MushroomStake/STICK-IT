@@ -1,4 +1,4 @@
-import React, { useRef, useState, useEffect } from 'react';
+import React, { useRef, useState, useEffect, useImperativeHandle, forwardRef } from 'react';
 
 type UploadedFile = {
   id: string;
@@ -12,7 +12,7 @@ type UploadedFile = {
   quantity: number;
 };
 
-interface UploadStepProps {
+export interface UploadStepProps {
   files: UploadedFile[];
   onAddFiles: (files: FileList | null) => void;
   onRemoveFile: (id: string) => void;
@@ -24,8 +24,9 @@ interface UploadStepProps {
   stickersRemaining?: number;
   onChooseOtherDeal?: () => void;
 }
+export type UploadStepHandle = { open: () => void };
 
-export default function UploadStep({ files, onAddFiles, onRemoveFile, onToggleRemoveBackground, onToggleBorder, onUpdateQuantity, onCustomize, errors, stickersRemaining = 0, onChooseOtherDeal }: UploadStepProps) {
+const UploadStep = forwardRef<UploadStepHandle, UploadStepProps>(function UploadStep({ files, onAddFiles, onRemoveFile, onToggleRemoveBackground, onToggleBorder, onUpdateQuantity, onCustomize, errors, stickersRemaining = 0, onChooseOtherDeal }: UploadStepProps, ref) {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
@@ -42,6 +43,9 @@ export default function UploadStep({ files, onAddFiles, onRemoveFile, onToggleRe
     }
     fileInputRef.current?.click();
   }
+
+  // expose `open` method to parent via ref
+  useImperativeHandle(ref, () => ({ open: triggerInput }), [triggerInput]);
 
   function handleInput(e: React.ChangeEvent<HTMLInputElement>) {
     if (stickersRemaining <= 0) {
@@ -85,7 +89,7 @@ export default function UploadStep({ files, onAddFiles, onRemoveFile, onToggleRe
         onDragOver={(e) => e.preventDefault()}
         className="border-2 border-dashed border-gray-300 rounded-xl p-6 flex flex-col items-center justify-center text-center bg-yellow-50 cursor-pointer"
       >
-        <input ref={fileInputRef} type="file" accept="image/png, image/jpeg, image/webp" multiple onChange={handleInput} className="hidden" />
+        <input aria-label="Upload images" ref={fileInputRef} type="file" accept="image/png, image/jpeg, image/webp" multiple onChange={handleInput} className="hidden" />
         <div className="w-12 h-12 rounded-full bg-[#FFD600] flex items-center justify-center mb-3 shadow">
           <svg className="w-6 h-6 text-black" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 5 17 10"/><line x1="12" y1="5" x2="12" y2="19"/></svg>
         </div>
@@ -148,7 +152,7 @@ export default function UploadStep({ files, onAddFiles, onRemoveFile, onToggleRe
                 <div className="flex-1 w-full">
                 <div className="flex items-start justify-between w-full">
                   <div className="flex items-center gap-3">
-                    <button onClick={() => onRemoveFile(file.id)} className="w-7 h-7 rounded-full bg-red-50 text-red-600 flex items-center justify-center">
+                    <button onClick={() => onRemoveFile(file.id)} className="w-7 h-7 rounded-full bg-red-50 text-red-600 flex items-center justify-center" aria-label={`Remove ${file.name}`}>
                       <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
                     </button>
                     <div className="text-sm font-semibold flex items-center gap-2">
@@ -165,7 +169,7 @@ export default function UploadStep({ files, onAddFiles, onRemoveFile, onToggleRe
                       <div className="text-xs text-gray-500">Remove Background</div>
                     </div>
                     <div>
-                      <button onClick={() => onToggleRemoveBackground(file.id)} aria-pressed={file.removeBackground} className="w-8 h-8 rounded-full flex items-center justify-center border">
+                      <button onClick={() => onToggleRemoveBackground(file.id)} className="w-8 h-8 rounded-full flex items-center justify-center border" aria-label={file.removeBackground ? `Remove background from ${file.name}` : `Add background removal for ${file.name}`}>
                         {file.removeBackground ? (
                           <svg className="w-4 h-4 text-green-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20 6L9 17l-5-5"/></svg>
                         ) : (
@@ -180,7 +184,7 @@ export default function UploadStep({ files, onAddFiles, onRemoveFile, onToggleRe
                       <div className="text-xs text-gray-500">Border</div>
                     </div>
                     <div>
-                      <button onClick={() => onToggleBorder(file.id)} aria-pressed={file.border} className="w-8 h-8 rounded-full flex items-center justify-center border">
+                      <button onClick={() => onToggleBorder(file.id)} className="w-8 h-8 rounded-full flex items-center justify-center border" aria-label={file.border ? `Remove border for ${file.name}` : `Add border for ${file.name}`}>
                         {file.border ? (
                           <svg className="w-4 h-4 text-green-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20 6L9 17l-5-5"/></svg>
                         ) : (
@@ -212,4 +216,6 @@ export default function UploadStep({ files, onAddFiles, onRemoveFile, onToggleRe
       </div>
     </div>
   );
-}
+});
+
+export default UploadStep;

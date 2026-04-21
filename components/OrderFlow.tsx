@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/router';
-import UploadStep from './UploadStep';
+import UploadStep, { UploadStepHandle } from './UploadStep';
 import FinalCheck from './FinalCheck';
 import QRCodeStep from './QRCodeStep';
 import ThankYouStep from './ThankYouStep';
@@ -79,10 +79,12 @@ export default function OrderFlow() {
   const [showServerErrorModal, setShowServerErrorModal] = useState<boolean>(false);
   const [serverErrorMessage, setServerErrorMessage] = useState<string>('');
   const [highlightQrCheckbox, setHighlightQrCheckbox] = useState<boolean>(false);
+  const [highlightReservationName, setHighlightReservationName] = useState<boolean>(false);
   const [direction, setDirection] = useState<'left' | 'right'>('left');
   const [prevStep, setPrevStep] = useState<number | null>(null);
   const [isAnimating, setIsAnimating] = useState<boolean>(false);
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const uploadStepRef = useRef<UploadStepHandle | null>(null);
   const timerRef = useRef<number | null>(null);
   const ANIM_MS = 320;
   const [showNoReservationModal, setShowNoReservationModal] = useState<boolean>(false);
@@ -634,6 +636,11 @@ export default function OrderFlow() {
     if (qrSaved) setHighlightQrCheckbox(false);
   }, [qrSaved]);
 
+  // clear reservation highlight when reservation name is edited
+  useEffect(() => {
+    if (reservationName && reservationName.trim().length > 0) setHighlightReservationName(false);
+  }, [reservationName]);
+
   const confirmDeal = DEALS.find((d) => d.id === selectedDeal) ?? null;
 
   function renderStep(s: number | null) {
@@ -650,12 +657,11 @@ export default function OrderFlow() {
           {DEALS.map((deal) => {
             const selected = selectedDeal === deal.id;
             return (
-              <button
-                key={deal.id}
-                onClick={() => setSelectedDeal(deal.id)}
-                className={`w-full text-left p-4 rounded-2xl flex items-start gap-4 border ${selected ? 'border-yellow-400 bg-yellow-50 shadow-lg' : 'border-gray-200 bg-white'} `}
-                aria-pressed={selected}
-              >
+                <button
+                  key={deal.id}
+                  onClick={() => setSelectedDeal(deal.id)}
+                  className={`w-full text-left p-4 rounded-2xl flex items-start gap-4 border ${selected ? 'border-yellow-400 bg-yellow-50 shadow-lg' : 'border-gray-200 bg-white'} `}
+                >
                 <div className="flex-1">
                   <div className="flex items-center justify-between">
                     <div className="text-xs font-semibold text-gray-500">{deal.tag}</div>
@@ -683,6 +689,7 @@ export default function OrderFlow() {
 
     if (s === 2) return (
       <UploadStep
+        ref={uploadStepRef}
         files={uploadedFiles}
         onAddFiles={handleAddFiles}
         onRemoveFile={removeFile}
@@ -702,6 +709,7 @@ export default function OrderFlow() {
         files={uploadedFiles}
         reservationName={reservationName}
         onReservationChange={setReservationName}
+        highlightReservationName={highlightReservationName}
       />
     );
 
@@ -808,7 +816,16 @@ export default function OrderFlow() {
 
             <div className="w-full flex justify-center mt-2">
               <div className="flex flex-col sm:flex-row gap-3 w-full max-w-lg px-4 sm:px-0">
-                <button onClick={() => setShowNoFilesModal(false)} className="w-full sm:w-auto px-4 py-2 rounded-md border bg-white">Upload files</button>
+                <button onClick={() => {
+                  setShowNoFilesModal(false);
+                  if (step !== 2) {
+                    goToStep(2);
+                    // wait briefly for the step to mount, then open file picker
+                    setTimeout(() => uploadStepRef.current?.open?.(), 120);
+                  } else {
+                    uploadStepRef.current?.open?.();
+                  }
+                }} className="w-full sm:w-auto px-4 py-2 rounded-md border bg-white">Upload files</button>
                 <button onClick={() => { setShowNoFilesModal(false); goToStep(1); }} className="w-full sm:w-auto px-4 py-2 rounded-md bg-yellow-400 font-semibold">Choose other deal</button>
               </div>
             </div>
@@ -826,7 +843,50 @@ export default function OrderFlow() {
 
             <div className="w-full flex justify-center mt-2">
               <div className="w-full max-w-lg px-4 sm:px-0">
-                <button onClick={() => setShowNoReservationModal(false)} className="w-full px-4 py-2 rounded-md border bg-white">Enter name</button>
+                <button onClick={() => {
+                  setShowNoReservationModal(false);
+                  // navigate to Review (step 3) and highlight the reservation input
+                  if (step !== 3) {
+                    goToStep(3);
+                    // wait for the step to mount/animate, then highlight and focus
+                    setTimeout(() => {
+                      try {
+                        const el = document.getElementById('reservation-name-input');
+                        setHighlightReservationName(true);
+                        if (el) {
+                          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                          setTimeout(() => {
+                            try { (el as HTMLElement).focus(); } catch (e) { /* ignore */ }
+                            setTimeout(() => setHighlightReservationName(false), 1600);
+                          }, 300);
+                        } else {
+                          setTimeout(() => setHighlightReservationName(false), 1600);
+                        }
+                      } catch (e) {
+                        // ignore
+                        setTimeout(() => setHighlightReservationName(false), 1600);
+                      }
+                    }, ANIM_MS + 40);
+                  } else {
+                    // already on step 3 — just highlight
+                    try {
+                      const el = document.getElementById('reservation-name-input');
+                      setHighlightReservationName(true);
+                      if (el) {
+                        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        setTimeout(() => {
+                          try { (el as HTMLElement).focus(); } catch (e) { /* ignore */ }
+                          setTimeout(() => setHighlightReservationName(false), 1600);
+                        }, 300);
+                      } else {
+                        setTimeout(() => setHighlightReservationName(false), 1600);
+                      }
+                    } catch (e) {
+                      // ignore
+                      setTimeout(() => setHighlightReservationName(false), 1600);
+                    }
+                  }
+                }} className="w-full px-4 py-2 rounded-md border bg-white">Enter name</button>
               </div>
             </div>
           </div>
@@ -922,7 +982,7 @@ export default function OrderFlow() {
       </div>
 
       {step !== 5 && (
-        <div className="fixed bottom-4 left-0 right-0 flex justify-center sm:relative sm:bottom-auto sm:left-auto sm:right-auto sm:justify-end" style={{ zIndex: 60 }}>
+        <div className="fixed bottom-4 left-0 right-0 flex justify-center sm:relative sm:bottom-auto sm:left-auto sm:right-auto sm:justify-end z-[60]">
         <div className="max-w-md w-full px-4">
           <div className="bg-white p-3 rounded-3xl shadow-lg flex gap-3 items-center">
             <button onClick={back} className="flex-1 bg-white border border-gray-200 rounded-full py-3 font-medium">Go Back</button>
@@ -963,9 +1023,16 @@ export default function OrderFlow() {
           from { transform: translateX(0); opacity: 1; }
           to { transform: translateX(30%); opacity: 0; }
         }
-        .modal-overlay { background: rgba(0,0,0,0); opacity: 0; transition: opacity 260ms ease; }
-        .modal-dialog { transform-origin: center; opacity: 0; transform: translateY(8px) scale(0.98); transition: opacity 260ms ease, transform 260ms cubic-bezier(0.2,0.8,0.2,1); }
-        .modal-opening .modal-overlay { opacity: 0.5; }
+        .modal-overlay {
+          /* radial spotlight keeps center clearer and darkens edges */
+          background: radial-gradient(ellipse at center, rgba(0,0,0,0.0) 0%, rgba(0,0,0,0.18) 35%, rgba(0,0,0,0.6) 100%);
+          backdrop-filter: blur(4px) saturate(80%);
+          -webkit-backdrop-filter: blur(4px) saturate(80%);
+          opacity: 0;
+          transition: opacity 260ms ease;
+        }
+        .modal-dialog { transform-origin: center; opacity: 0; transform: translateY(8px) scale(0.98); transition: opacity 260ms ease, transform 260ms cubic-bezier(0.2,0.8,0.2,1); box-shadow: 0 24px 48px rgba(7,18,26,0.22); }
+        .modal-opening .modal-overlay { opacity: 1; }
         .modal-opening .modal-dialog { transform: translateY(0) scale(1); opacity: 1; }
         .modal-closing .modal-overlay { opacity: 0; }
         .modal-closing .modal-dialog { transform: translateY(8px) scale(0.98); opacity: 0; }
