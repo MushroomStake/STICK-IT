@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Stage, Layer, Image as KonvaImage, Shape, Group, Rect } from 'react-konva';
 
-type ShapeType = 'circle' | 'square' | 'star' | 'hexagon' | 'heart';
+type ShapeType = 'circle' | 'square' | 'star' | 'hexagon' | 'triangle';
 
 interface CustomSettings {
   shape?: ShapeType;
@@ -61,17 +61,7 @@ function drawRoundedRectPath(ctx: any, cx: number, cy: number, size: number, rad
   ctx.quadraticCurveTo(x, y, x + r, y);
 }
 
-function drawHeartPath(ctx: any, cx: number, cy: number, size: number) {
-  // Simple heart using bezier curves scaled to `size`
-  const topY = cy - size * 0.15;
-  const bottomY = cy + size * 0.45;
-  const leftX = cx - size * 0.5;
-  const rightX = cx + size * 0.5;
-
-  ctx.moveTo(cx, bottomY);
-  ctx.bezierCurveTo(cx + size * 0.6, cy + size * 0.15, rightX, topY, cx, cy - size * 0.18);
-  ctx.bezierCurveTo(leftX, topY, cx - size * 0.6, cy + size * 0.15, cx, bottomY);
-}
+// triangle uses the generic polygon path (3 sides)
 
 export default function ImageCustomizer({ initialImageUrl, initialSettings = null, onSave, onClose }: ImageCustomizerProps) {
   const stageRef = useRef<any | null>(null);
@@ -81,7 +71,11 @@ export default function ImageCustomizer({ initialImageUrl, initialSettings = nul
   const [localSrc, setLocalSrc] = useState<string | undefined>(initialImageUrl ?? undefined);
   const createdObjectUrlRef = useRef<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
-  const [shape, setShape] = useState<ShapeType>(initialSettings?.shape ?? 'circle');
+  // If older saved settings used 'heart', treat them as 'triangle' now
+  // accept legacy 'heart' value from persisted settings by checking raw value
+  const legacyShape = (initialSettings as any)?.shape;
+  const initialShape = (legacyShape === 'heart') ? 'triangle' : (initialSettings?.shape ?? 'circle');
+  const [shape, setShape] = useState<ShapeType>(initialShape);
   const [borderColor, setBorderColor] = useState<string>(initialSettings?.borderColor ?? '#FFD600');
   const [strokeWidth, setStrokeWidth] = useState<number>(initialSettings?.strokeWidth ?? 8);
   const [padding, setPadding] = useState<number>(initialSettings?.padding ?? 0);
@@ -259,8 +253,8 @@ export default function ImageCustomizer({ initialImageUrl, initialSettings = nul
       }
     } else if (shape === 'hexagon') {
       drawPolygonPath(ctx, cx, cy, 6, stageSize / 2 - pad);
-    } else if (shape === 'heart') {
-      drawHeartPath(ctx, cx, cy, stageSize - pad * 2);
+    } else if (shape === 'triangle') {
+      drawPolygonPath(ctx, cx, cy, 3, stageSize / 2 - pad);
     } else {
       // star
       drawStarPath(ctx, cx, cy, 5, stageSize / 2 - pad, (stageSize / 2 - pad) * 0.5);
@@ -284,8 +278,8 @@ export default function ImageCustomizer({ initialImageUrl, initialSettings = nul
       }
     } else if (shape === 'hexagon') {
       drawPolygonPath(ctx, cx, cy, 6, stageSize / 2 - pad);
-    } else if (shape === 'heart') {
-      drawHeartPath(ctx, cx, cy, stageSize - pad * 2);
+    } else if (shape === 'triangle') {
+      drawPolygonPath(ctx, cx, cy, 3, stageSize / 2 - pad);
     } else {
       drawStarPath(ctx, cx, cy, 5, stageSize / 2 - pad, (stageSize / 2 - pad) * 0.5);
     }
@@ -359,8 +353,8 @@ export default function ImageCustomizer({ initialImageUrl, initialSettings = nul
         <div className="w-full max-w-2xl">
           <div className="mb-3">
             <div className="text-sm font-medium mb-2">Shape</div>
-            <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
-              {['circle','square','star','hexagon','heart'].map((s) => (
+              <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
+              {['circle','square','star','hexagon','triangle'].map((s) => (
                 <button
                   key={s}
                   onClick={() => setShape(s as ShapeType)}
