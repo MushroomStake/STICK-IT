@@ -125,7 +125,7 @@ const UploadStep = forwardRef<UploadStepHandle, UploadStepProps>(function Upload
         <div className="space-y-4">
           {files.map((file) => (
             <div key={file.id} className="bg-white rounded-xl p-4 shadow-sm flex flex-col md:flex-row items-start gap-4">
-              <div className="relative w-full md:w-20 h-40 md:h-20 min-w-[5rem] min-h-[5rem] rounded-md bg-gray-100 overflow-hidden flex items-center justify-center flex-shrink-0">
+              <div className="relative w-full md:w-20 aspect-square min-w-[5rem] rounded-md bg-gray-100 overflow-hidden flex items-center justify-center flex-shrink-0">
                 {/** image preview: use <img> for more reliable rendering on mobile */}
                 {(() => {
                   const imageSrc = file.uploadedUrl ?? file.previewUrl;
@@ -152,47 +152,9 @@ const UploadStep = forwardRef<UploadStepHandle, UploadStepProps>(function Upload
                 <div className="flex-1 w-full">
                 <div className="flex items-start justify-between w-full">
                   <div className="flex items-center gap-3">
-                    <button onClick={() => onRemoveFile(file.id)} className="w-7 h-7 rounded-full bg-red-50 text-red-600 flex items-center justify-center" aria-label={`Remove ${file.name}`}>
-                      <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
-                    </button>
-                    <div className="text-sm font-semibold flex items-center gap-2">
-                      <span title={file.name} className="max-w-[14rem] block truncate">{file.name}</span>
-                      {file.uploading && <span className="text-xs text-gray-500">Uploading…</span>}
-                    </div>
+                    {file.uploading && <div className="text-xs text-gray-500">Uploading…</div>}
                   </div>
                   <div className="text-sm text-gray-500">&nbsp;</div>
-                </div>
-
-                <div className="mt-3 grid grid-cols-2 gap-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <div className="text-xs text-gray-500">Remove Background</div>
-                    </div>
-                    <div>
-                      <button onClick={() => onToggleRemoveBackground(file.id)} className="w-8 h-8 rounded-full flex items-center justify-center border" aria-label={file.removeBackground ? `Remove background from ${file.name}` : `Add background removal for ${file.name}`}>
-                        {file.removeBackground ? (
-                          <svg className="w-4 h-4 text-green-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20 6L9 17l-5-5"/></svg>
-                        ) : (
-                          <svg className="w-4 h-4 text-red-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
-                        )}
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <div className="text-xs text-gray-500">Border</div>
-                    </div>
-                    <div>
-                      <button onClick={() => onToggleBorder(file.id)} className="w-8 h-8 rounded-full flex items-center justify-center border" aria-label={file.border ? `Remove border for ${file.name}` : `Add border for ${file.name}`}>
-                        {file.border ? (
-                          <svg className="w-4 h-4 text-green-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20 6L9 17l-5-5"/></svg>
-                        ) : (
-                          <svg className="w-4 h-4 text-red-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
-                        )}
-                      </button>
-                    </div>
-                  </div>
                 </div>
 
                 <div className="mt-3 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
@@ -203,6 +165,10 @@ const UploadStep = forwardRef<UploadStepHandle, UploadStepProps>(function Upload
                       <div className="px-3 py-1 font-semibold">{file.quantity}</div>
                       <button onClick={() => onUpdateQuantity(file.id, 1)} className="px-3 py-1">+</button>
                     </div>
+
+                    <button onClick={() => onRemoveFile(file.id)} className="ml-2 w-10 h-10 rounded-full bg-red-50 text-red-600 flex items-center justify-center" aria-label={`Remove ${file.name}`}>
+                      <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+                    </button>
                   </div>
 
                   <div>

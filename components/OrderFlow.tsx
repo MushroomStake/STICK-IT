@@ -1,9 +1,11 @@
 import { useState, useEffect, useRef } from 'react';
+import dynamic from 'next/dynamic';
 import { useRouter } from 'next/router';
 import UploadStep, { UploadStepHandle } from './UploadStep';
 import FinalCheck from './FinalCheck';
 import QRCodeStep from './QRCodeStep';
 import ThankYouStep from './ThankYouStep';
+const ImageCustomizer = dynamic(() => import('./ImageCustomizer'), { ssr: false });
 
 type Deal = {
   id: string;
@@ -51,6 +53,8 @@ const stepLabels = [
   'Complete',
 ];
 
+const CUSTOMIZER_STEP = 99;
+
 export default function OrderFlow() {
   const [step, setStep] = useState<number>(1);
   const [selectedDeal, setSelectedDeal] = useState<string>('standard');
@@ -60,12 +64,15 @@ export default function OrderFlow() {
     name: string;
     previewUrl?: string; // local object URL
     uploadedUrl?: string; // public URL from storage
+    originalUrl?: string; // original uploaded file URL (preserved across customizations)
+    originalPath?: string; // storage path for the original upload
     path?: string; // storage path (safeName) returned by upload API
     uploading?: boolean;
     error?: string;
     removeBackground: boolean;
     border: boolean;
     quantity: number;
+    custom?: any; // customization metadata (shape, borderColor, etc.)
   };
 
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
@@ -75,9 +82,11 @@ export default function OrderFlow() {
   const [reservationName, setReservationName] = useState<string>('');
   const [processingOrder, setProcessingOrder] = useState(false);
   const [orderId, setOrderId] = useState<string | null>(null);
+  const [pendingDeletePaths, setPendingDeletePaths] = useState<string[]>([]);
   // server-side / transient order errors are shown in a modal now
   const [showServerErrorModal, setShowServerErrorModal] = useState<boolean>(false);
   const [serverErrorMessage, setServerErrorMessage] = useState<string>('');
+  const [customizeFileId, setCustomizeFileId] = useState<string | null>(null);
   const [highlightQrCheckbox, setHighlightQrCheckbox] = useState<boolean>(false);
   const [highlightReservationName, setHighlightReservationName] = useState<boolean>(false);
   const [direction, setDirection] = useState<'left' | 'right'>('left');
@@ -103,7 +112,9 @@ export default function OrderFlow() {
         // Do not restore the final completed step (5). If a saved state
         // contains step 5, clear it so future flows start fresh.
         if (typeof parsed.step === 'number') {
-          if (parsed.step === 5) {
+          // Only restore steps in the main flow (1-5). Other transient
+          // UI states such as the customizer should not be persisted.
+          if (parsed.step === 5 || parsed.step < 1 || parsed.step > 5) {
             try { localStorage.removeItem(STORAGE_KEY); } catch (e) { /* ignore */ }
           } else {
             setStep(parsed.step);
@@ -121,12 +132,15 @@ export default function OrderFlow() {
             name: f.name,
             previewUrl: f.previewUrl && typeof f.previewUrl === 'string' && !f.previewUrl.startsWith('blob:') ? f.previewUrl : undefined,
             uploadedUrl: f.uploadedUrl,
+            originalUrl: f.originalUrl,
+            originalPath: f.originalPath,
             path: f.path,
             uploading: false,
             error: f.error,
             removeBackground: !!f.removeBackground,
             border: !!f.border,
             quantity: typeof f.quantity === 'number' ? f.quantity : 1,
+            custom: f.custom || undefined,
           }));
           setUploadedFiles(files);
         }
@@ -183,7 +197,7 @@ export default function OrderFlow() {
       // If we've reached the final step, clear any persisted state and
       // avoid saving the completed state. This ensures returning users
       // start a fresh flow instead of being restored to step 5.
-      if (step === 5) {
+      if (step === 5 || step < 1 || step > 5) {
         try { localStorage.removeItem(STORAGE_KEY); } catch (e) { /* ignore */ }
         return;
       }
@@ -193,6 +207,8 @@ export default function OrderFlow() {
         // only persist previewUrl if it's not a blob URL
         previewUrl: f.previewUrl && !f.previewUrl.startsWith('blob:') ? f.previewUrl : undefined,
         uploadedUrl: f.uploadedUrl,
+        originalUrl: f.originalUrl,
+        originalPath: f.originalPath,
         path: f.path,
         // don't persist transient uploading state
         uploading: false,
@@ -200,6 +216,7 @@ export default function OrderFlow() {
         removeBackground: f.removeBackground,
         border: f.border,
         quantity: f.quantity,
+        custom: f.custom,
       }));
 
       const toStore = {
@@ -323,7 +340,10 @@ export default function OrderFlow() {
 
       const publicUrl = json.publicUrl as string | undefined;
       const path = json.path as string | undefined;
-      setUploadedFiles((prev) => prev.map((f) => (f.id === id ? { ...f, uploading: false, uploadedUrl: publicUrl, path, error: undefined } : f)));
+      // add a cache-busting query param for UI preview so overwritten files
+      // are immediately visible in the client (avoids stale cached images).
+      const previewUrl = publicUrl ? `${publicUrl}?ts=${Date.now()}` : publicUrl;
+      setUploadedFiles((prev) => prev.map((f) => (f.id === id ? { ...f, uploading: false, uploadedUrl: publicUrl, originalUrl: f.originalUrl ?? publicUrl, originalPath: f.originalPath ?? path, path, error: undefined, previewUrl } : f)));
 
       // revoke object URL to free memory
       if (previewUrl && previewUrl.startsWith('blob:')) {
@@ -398,8 +418,10 @@ export default function OrderFlow() {
   }
 
   function handleCustomize(id: string) {
-    // placeholder, can open modal or navigate to customization UI
-    alert(`Customize ${id}`);
+    // open the customizer as its own animated section (uses the same
+    // animation helpers as the step transitions so the UI slides over).
+    setCustomizeFileId(id);
+    goToStep(CUSTOMIZER_STEP);
   }
 
 
@@ -506,6 +528,17 @@ export default function OrderFlow() {
     setProcessingOrder(true);
     try {
       const deal = DEALS.find((d) => d.id === selectedDeal);
+      // Determine deletePaths to send to server: include any queued pending deletes
+      // plus original upload paths for files that were customized so the
+      // original (non-custom) blob is removed on purchase.
+      const originalsToRemove: string[] = [];
+      for (const f of uploadedFiles) {
+        if (f.custom && f.originalPath && f.originalPath !== f.path) {
+          originalsToRemove.push(f.originalPath);
+        }
+      }
+      const deletePaths = Array.from(new Set([...(pendingDeletePaths || []), ...originalsToRemove]));
+
       const payload = {
         reservationName: reservationName.trim(),
         dealId: selectedDeal,
@@ -513,6 +546,8 @@ export default function OrderFlow() {
         dealPrice: deal?.price ?? 0,
         files: uploadedFiles.map((f) => ({ uploadedUrl: f.uploadedUrl, name: f.name, quantity: f.quantity ?? 1, removeBackground: f.removeBackground, border: f.border })),
         qrValue,
+        // server will attempt to delete any leftover/previous versions
+        deletePaths,
       };
 
       const res = await fetch('/api/create-order', {
@@ -542,19 +577,54 @@ export default function OrderFlow() {
     }
   }
 
-  function cancel() {
+  async function cancel() {
+    // Attempt to remove any uploaded files from storage that were not purchased.
+    // This includes the current `uploadedFiles` storage paths, any originalPath
+    // values (original uploads preserved during customization), and any
+    // previously queued `pendingDeletePaths`.
+    try {
+      const fromUploads = uploadedFiles.flatMap((f) => [f.path, f.originalPath]).filter((p) => !!p) as string[];
+      const combined = Array.from(new Set([...(pendingDeletePaths || []), ...fromUploads]));
+
+      if (combined.length > 0) {
+        for (const p of combined) {
+          try {
+            const res = await fetch('/api/delete-file', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ path: p }),
+            });
+            if (!res.ok) {
+              const json = await res.json().catch(() => null);
+              const msg = json?.error || `Failed to delete ${p}`;
+              setUploadErrors((prev) => (prev || []).concat(msg));
+            }
+          } catch (err) {
+            setUploadErrors((prev) => (prev || []).concat(`Network error deleting ${p}`));
+          }
+        }
+      }
+    } catch (e) {
+      // best-effort only — don't block navigating home on unexpected errors
+      console.error('cleanup before cancel error', e);
+    }
+
     try {
       if (typeof window !== 'undefined') localStorage.removeItem(STORAGE_KEY);
     } catch (e) {
       // ignore
     }
+
+    // Clear in-memory state (revokes blob URLs, clears arrays)
+    clearInMemoryState();
+
     router.push('/user');
   }
 
-  function back() {
+  async function back() {
     if (step > 1) {
       goToStep(step - 1);
-    } else cancel();
+    } else await cancel();
   }
 
   function goToStep(target: number) {
@@ -610,6 +680,7 @@ export default function OrderFlow() {
     setQrValue(null);
     setQrSaved(false);
     setOrderId(null);
+    setPendingDeletePaths([]);
     setUploadErrors([]);
     setHighlightQrCheckbox(false);
     setProcessingOrder(false);
@@ -642,6 +713,7 @@ export default function OrderFlow() {
   }, [reservationName]);
 
   const confirmDeal = DEALS.find((d) => d.id === selectedDeal) ?? null;
+  const fileToCustomize = uploadedFiles.find((f) => f.id === customizeFileId) ?? null;
 
   function renderStep(s: number | null) {
     if (s === 1) return (
@@ -701,6 +773,115 @@ export default function OrderFlow() {
         stickersRemaining={Math.max(0, getDealCount() - totalQuantity())}
         onChooseOtherDeal={() => goToStep(1)}
       />
+    );
+
+    if (s === CUSTOMIZER_STEP) return (
+      <div>
+        <ImageCustomizer
+          initialImageUrl={fileToCustomize?.originalUrl ?? fileToCustomize?.uploadedUrl ?? fileToCustomize?.previewUrl}
+          initialSettings={fileToCustomize?.custom ?? null}
+          onSave={async (dataUrl: string, settings?: any) => {
+            const id = customizeFileId;
+            if (!id) {
+              setCustomizeFileId(null);
+              goToStep(2);
+              return;
+            }
+
+            // mark uploading
+            setUploadedFiles((prev) => prev.map((f) => (f.id === id ? { ...f, uploading: true, error: undefined } : f)));
+
+            try {
+              // convert dataURL to Blob
+              const blob = await (await fetch(dataUrl)).blob();
+
+              // remember previous storage path (if any) so we can delete it when the order is finalized
+              const prevPath = uploadedFiles.find((f) => f.id === id)?.path;
+
+              // Determine the next incremental custom filename: custom1.png, custom2.png, ...
+              const knownPaths: string[] = [];
+              // collect known paths from uploadedFiles and pendingDeletePaths
+              uploadedFiles.forEach((f) => { if (f.path) knownPaths.push(f.path); });
+              pendingDeletePaths.forEach((p) => { if (p) knownPaths.push(p); });
+
+              const baseRegex = new RegExp(`^${id}_custom(?:([0-9]+))?\\.png$`);
+              let maxIdx = 0;
+              for (const p of knownPaths) {
+                const base = p.split('/').pop() || p;
+                const m = base.match(baseRegex);
+                if (m) {
+                  const numStr = m[1];
+                  const idx = numStr && numStr.length > 0 ? parseInt(numStr, 10) : 1;
+                  if (!Number.isNaN(idx) && idx > maxIdx) maxIdx = idx;
+                }
+              }
+              const nextIdx = maxIdx + 1;
+              const filename = `custom${nextIdx}.png`;
+              const file = new File([blob], filename, { type: blob.type || 'image/png' });
+
+              const form = new FormData();
+              form.append('file', file);
+              form.append('id', id);
+
+              const res = await fetch('/api/upload', { method: 'POST', body: form });
+              const json = await res.json().catch(() => null);
+
+              if (!res.ok) {
+                setUploadedFiles((prev) => prev.map((f) => (f.id === id ? { ...f, uploading: false, error: json?.error || 'Upload failed' } : f)));
+                setUploadErrors((errs) => [...(errs || []), `Failed to save customized image`]);
+                // keep preview as the dataUrl so user sees their work
+                setUploadedFiles((prev) => prev.map((f) => (f.id === id ? { ...f, previewUrl: dataUrl } : f)));
+              } else {
+                const publicUrl = json?.publicUrl as string | undefined;
+                const path = json?.path as string | undefined;
+
+                // add cache-busting timestamp so UI shows the newly uploaded image
+                const previewUrl = publicUrl ? `${publicUrl}?ts=${Date.now()}` : publicUrl;
+                setUploadedFiles((prev) => prev.map((f) => (f.id === id ? { ...f, uploading: false, uploadedUrl: publicUrl, previewUrl, path, error: undefined, custom: settings ?? f.custom } : f)));
+
+                // If there was a previous stored path and it's different from the
+                // newly uploaded path, attempt to remove it immediately — but
+                // only remove previous "custom" versions (avoid deleting the
+                // original uploaded file which is preserved on `originalUrl`).
+                if (prevPath && path && prevPath !== path) {
+                  const prevBase = (prevPath || '').split('/').pop() || prevPath;
+                  const customRegex = new RegExp(`^${id}_custom(?:[0-9]+)?\\.png$`);
+                  if (customRegex.test(prevBase || '')) {
+                    try {
+                      const delRes = await fetch('/api/delete-file', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ path: prevPath }),
+                      });
+                      const delJson = await delRes.json().catch(() => null);
+                      if (!delRes.ok) {
+                        // if delete failed, queue for deletion at checkout as a fallback
+                        setPendingDeletePaths((p) => (prevPath && !p.includes(prevPath) ? [...p, prevPath] : p));
+                      }
+                    } catch (e) {
+                      // network error — queue for deletion later
+                      setPendingDeletePaths((p) => (prevPath && !p.includes(prevPath) ? [...p, prevPath] : p));
+                    }
+                  }
+                  // if prevPath is not a custom variant (likely the original),
+                  // do not delete it here and do not queue it — preserve original
+                }
+              }
+            } catch (err) {
+              console.error('save customized image error', err);
+              setUploadedFiles((prev) => prev.map((f) => (f.id === id ? { ...f, uploading: false, error: 'Save failed' } : f)));
+              setUploadErrors((errs) => [...(errs || []), 'Failed to save customized image']);
+            } finally {
+              setCustomizeFileId(null);
+              goToStep(2);
+            }
+          }}
+          onClose={() => {
+            setCustomizeFileId(null);
+            goToStep(2);
+          }}
+        />
+      </div>
     );
 
     if (s === 3) return (
@@ -776,7 +957,7 @@ export default function OrderFlow() {
         </div>
         <div className="flex items-center justify-between">
           <div>
-            <div className="text-sm font-medium">Step {step}: {stepLabels[step - 1]}</div>
+            <div className="text-sm font-medium">{(step >= 1 && step <= 5) ? `Step ${step}: ${stepLabels[step - 1]}` : 'Customize Image'}</div>
           </div>
           <div className="text-xs uppercase font-semibold">
             {step === 5 ? (
@@ -981,7 +1162,7 @@ export default function OrderFlow() {
         </div>
       </div>
 
-      {step !== 5 && (
+      {step !== 5 && step !== CUSTOMIZER_STEP && (
         <div className="fixed bottom-4 left-0 right-0 flex justify-center sm:relative sm:bottom-auto sm:left-auto sm:right-auto sm:justify-end z-[60]">
         <div className="max-w-md w-full px-4">
           <div className="bg-white p-3 rounded-3xl shadow-lg flex gap-3 items-center">

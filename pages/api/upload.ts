@@ -112,10 +112,28 @@ export default async function handler(req: any, res: any) {
     const safeName = `${id}_${String(original).replace(/[^a-zA-Z0-9_.-]/g, '_')}`;
     const bucket = process.env.NEXT_PUBLIC_SUPABASE_BUCKET || 'stickit-uploads';
 
+    // allow the client to request overwriting an existing object (useful for
+    // in-place customization saves). Default is no-overwrite to avoid
+    // accidental replacements. Be tolerant of different shapes returned by
+    // formidable (string, boolean, or array).
+    const rawOverwrite = (fields as any)?.overwrite;
+    let overwrite = false;
+    try {
+      if (rawOverwrite === true) overwrite = true;
+      else if (typeof rawOverwrite === 'string') overwrite = rawOverwrite === '1' || rawOverwrite.toLowerCase() === 'true';
+      else if (Array.isArray(rawOverwrite)) overwrite = rawOverwrite.some((v) => String(v) === '1' || String(v).toLowerCase() === 'true');
+      else overwrite = false;
+    } catch (e) {
+      overwrite = false;
+    }
+
+    // log helpful debug info to help diagnose 409 conflicts in production
+    console.debug('[upload] safeName=', safeName, 'id=', id, 'original=', original, 'overwrite=', overwrite, 'bucket=', bucket);
+
     const { error: uploadError } = await supabaseAdmin.storage.from(bucket).upload(safeName, buffer, {
       contentType: file.mimetype || file.type || undefined,
       cacheControl: '3600',
-      upsert: false,
+      upsert: !!overwrite,
     });
 
     if (uploadError) {

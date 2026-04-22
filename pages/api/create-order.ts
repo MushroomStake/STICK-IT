@@ -22,13 +22,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const supabaseAdmin = createClient(supabaseUrl, serviceRole);
 
   try {
-    const { reservationName, dealId, dealTitle, dealPrice, files, qrValue } = req.body as {
+    const { reservationName, dealId, dealTitle, dealPrice, files, qrValue, deletePaths } = req.body as {
       reservationName: string;
       dealId?: string;
       dealTitle?: string;
       dealPrice?: number;
       files?: FilePayload[];
       qrValue?: string;
+      deletePaths?: string[];
     };
 
     if (!reservationName || !qrValue) {
@@ -79,6 +80,21 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           return res.status(500).json({ error: 'Order created but failed to save files' });
         }
       }
+    }
+
+    // Attempt to delete any leftover/previous file versions that were recorded by the client.
+    // This is best-effort: failures are logged but do not prevent order creation.
+    try {
+      const bucket = process.env.NEXT_PUBLIC_SUPABASE_BUCKET || 'stickit-uploads';
+      if (deletePaths && Array.isArray(deletePaths) && deletePaths.length > 0) {
+        const safePaths = deletePaths.filter((p) => typeof p === 'string' && p.length > 0);
+        if (safePaths.length > 0) {
+          const { error: delError } = await supabaseAdmin.storage.from(bucket).remove(safePaths);
+          if (delError) console.warn('create-order: failed to remove some old files', delError);
+        }
+      }
+    } catch (e) {
+      console.warn('create-order: cleanup deletePaths failed', e);
     }
 
     return res.status(200).json({ orderId });
