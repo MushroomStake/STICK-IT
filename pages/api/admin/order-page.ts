@@ -19,6 +19,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const supabaseAdmin = createClient(supabaseUrl, serviceRole);
   const CACHE_BUCKET = process.env.SUPABASE_CACHE_BUCKET || 'stickit-exports';
 
+  // compute requested page index and cache key early so we can check cache
+  const pageIndex = Math.max(0, parseInt(page as string, 10) - 1);
+  const cacheKey = `order_pages/${id}/page-${pageIndex + 1}.png`;
+
   // Try cached page image
   try {
     const { data: cached, error: cachedErr } = await supabaseAdmin.storage.from(CACHE_BUCKET).download(cacheKey);
@@ -65,8 +69,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     // fixed 10-per-page layout
     const perPage = 10;
-    const pageIndex = Math.max(0, parseInt(page as string, 10) - 1);
-    const cacheKey = `order_pages/${id}/page-${pageIndex + 1}.png`;
     const pagesNeeded = Math.max(1, Math.ceil(imgs.length / perPage));
     if (pageIndex >= pagesNeeded) return res.status(400).send('page out of range');
 
