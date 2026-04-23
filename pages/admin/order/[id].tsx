@@ -63,7 +63,6 @@ function StatusActions({ status, updating, onChange }: { status: string | null; 
       <div className="flex items-center gap-3 flex-wrap sm:flex-nowrap">
         <button onClick={() => onChange('pending')} className={outline} aria-label="Undo status">Undo</button>
         <button onClick={() => onChange('completed')} className={green} aria-label="Mark as received">Already Received</button>
-        <button onClick={() => onChange('cancelled')} className={danger} aria-label="Cancel order">Cancel</button>
       </div>
     );
   }
@@ -74,7 +73,6 @@ function StatusActions({ status, updating, onChange }: { status: string | null; 
       <div className="flex items-center gap-3 flex-wrap sm:flex-nowrap">
         <div className="text-sm text-green-700 font-semibold px-3 py-1 rounded bg-green-50">Completed</div>
         <button onClick={() => onChange('ready')} className={outline} aria-label="Undo completed">Undo</button>
-        <button onClick={() => onChange('cancelled')} className={danger} aria-label="Cancel order">Cancel</button>
       </div>
     );
   }
