@@ -181,12 +181,12 @@ export default function AdminQRScanPage() {
           <div className="text-sm font-medium mb-4">Counter Scanner</div>
 
           <div className="w-full max-w-3xl mx-auto">
-            <div className="relative border-2 border-dashed rounded-lg overflow-hidden" style={{ paddingTop: '56.25%' }}>
+            <div className="relative border-2 border-dashed rounded-lg overflow-hidden h-64 sm:h-80 md:h-[480px]">
               {/* video positioned absolute over the container */}
               <video ref={videoRef} muted playsInline className="absolute inset-0 w-full h-full object-cover bg-black" />
 
               {/* overlay frame in center */}
-              <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-2/3 max-w-[520px] h-[320px] border-4 border-yellow-400 rounded-md pointer-events-none flex items-center justify-center">
+              <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-2/3 max-w-[520px] h-full border-4 border-yellow-400 rounded-md pointer-events-none flex items-center justify-center">
                 <div className="w-28 h-28 border-4 border-yellow-400 rounded-lg flex items-center justify-center">
                   <svg className="w-10 h-10 text-yellow-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M3 3h8v8H3zM13 3h8v8h-8zM3 13h8v8H3zM13 13h8v8h-8z" /></svg>
                 </div>
