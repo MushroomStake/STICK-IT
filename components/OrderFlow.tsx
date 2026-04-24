@@ -80,6 +80,8 @@ export default function OrderFlow() {
   const [qrValue, setQrValue] = useState<string | null>(null);
   const [qrSaved, setQrSaved] = useState(false);
   const [reservationName, setReservationName] = useState<string>('');
+  const [phoneNumber, setPhoneNumber] = useState<string>('');
+  const [samplePhone, setSamplePhone] = useState<string>('09*********');
   const [processingOrder, setProcessingOrder] = useState(false);
   const [orderId, setOrderId] = useState<string | null>(null);
   const [pendingDeletePaths, setPendingDeletePaths] = useState<string[]>([]);
@@ -89,6 +91,7 @@ export default function OrderFlow() {
   const [customizeFileId, setCustomizeFileId] = useState<string | null>(null);
   const [highlightQrCheckbox, setHighlightQrCheckbox] = useState<boolean>(false);
   const [highlightReservationName, setHighlightReservationName] = useState<boolean>(false);
+  const [highlightPhone, setHighlightPhone] = useState<boolean>(false);
   const [direction, setDirection] = useState<'left' | 'right'>('left');
   const [prevStep, setPrevStep] = useState<number | null>(null);
   const [isAnimating, setIsAnimating] = useState<boolean>(false);
@@ -122,6 +125,7 @@ export default function OrderFlow() {
         }
         if (typeof parsed.selectedDeal === 'string') setSelectedDeal(parsed.selectedDeal);
         if (typeof parsed.reservationName === 'string') setReservationName(parsed.reservationName);
+        if (typeof parsed.phoneNumber === 'string') setPhoneNumber(parsed.phoneNumber);
         if (parsed.qrValue) setQrValue(parsed.qrValue);
         if (typeof parsed.qrSaved === 'boolean') setQrSaved(parsed.qrSaved);
         if (parsed.orderId) setOrderId(parsed.orderId);
@@ -223,6 +227,7 @@ export default function OrderFlow() {
         step,
         selectedDeal,
         reservationName,
+        phoneNumber,
         qrValue,
         qrSaved,
         orderId,
@@ -232,7 +237,17 @@ export default function OrderFlow() {
     } catch (e) {
       // ignore storage errors
     }
-  }, [step, selectedDeal, reservationName, qrValue, qrSaved, orderId, uploadedFiles]);
+  }, [step, selectedDeal, reservationName, phoneNumber, qrValue, qrSaved, orderId, uploadedFiles]);
+
+  // generate a client-random sample phone number (09 + 9 digits)
+  useEffect(() => {
+    try {
+      const digits = Array.from({ length: 9 }).map(() => Math.floor(Math.random() * 10)).join('');
+      setSamplePhone(`09${digits}`);
+    } catch (e) {
+      // keep fallback
+    }
+  }, []);
 
   // Validate totals whenever deal or files change
   useEffect(() => {
@@ -464,13 +479,28 @@ export default function OrderFlow() {
         return;
       }
 
-      // require reservation name before proceeding
-      if (!reservationName || reservationName.trim().length < 2) {
-        const msg = 'Please enter the reservation name (at least 2 characters).';
+      // require reservation name and phone before proceeding
+      const phoneRaw = (phoneNumber || '').replace(/\D/g, '');
+      const phoneValid = /^09\d{9}$/.test(phoneRaw);
+      if (!reservationName || reservationName.trim().length < 2 || !phoneValid) {
+        const msgs: string[] = [];
+        if (!reservationName || reservationName.trim().length < 2) msgs.push('Please enter the reservation name (at least 2 characters).');
+        if (!phoneValid) msgs.push(`Please enter a valid phone number (e.g. ${samplePhone}).`);
         setUploadErrors((prev) => {
-          if (prev && prev.includes(msg)) return prev;
-          return [...(prev || []), msg];
+          const next = Array.isArray(prev) ? [...prev] : [];
+          msgs.forEach((m) => { if (!next.includes(m)) next.push(m); });
+          return next;
         });
+
+        if (!reservationName || reservationName.trim().length < 2) {
+          setHighlightReservationName(true);
+          setTimeout(() => setHighlightReservationName(false), 1600);
+        }
+        if (!phoneValid) {
+          setHighlightPhone(true);
+          setTimeout(() => setHighlightPhone(false), 1600);
+        }
+
         setShowNoReservationModal(true);
         return;
       }
@@ -525,6 +555,19 @@ export default function OrderFlow() {
       return;
     }
 
+    // If provided, validate phone number format (basic check: digits only, starts with 09 and 11 digits)
+    const phoneRaw = (phoneNumber || '').replace(/\D/g, '');
+    if (phoneRaw && !/^09\d{9}$/.test(phoneRaw)) {
+      const msg = `Please enter a valid phone number (e.g. ${samplePhone}).`;
+      setUploadErrors((prev) => {
+        if (prev && prev.includes(msg)) return prev;
+        return [...(prev || []), msg];
+      });
+      setHighlightPhone(true);
+      setTimeout(() => setHighlightPhone(false), 1600);
+      return;
+    }
+
     setProcessingOrder(true);
     try {
       const deal = DEALS.find((d) => d.id === selectedDeal);
@@ -541,6 +584,7 @@ export default function OrderFlow() {
 
       const payload = {
         reservationName: reservationName.trim(),
+        phoneNumber: phoneRaw || null,
         dealId: selectedDeal,
         dealTitle: deal?.title ?? '',
         dealPrice: deal?.price ?? 0,
@@ -891,6 +935,10 @@ export default function OrderFlow() {
         reservationName={reservationName}
         onReservationChange={setReservationName}
         highlightReservationName={highlightReservationName}
+        phoneNumber={phoneNumber}
+        onPhoneChange={setPhoneNumber}
+        highlightPhone={highlightPhone}
+        samplePhone={samplePhone}
       />
     );
 
@@ -1018,56 +1066,61 @@ export default function OrderFlow() {
         <div className="bg-yellow-50 border border-yellow-200 rounded-lg shadow-xl p-6 sm:p-8">
           <div className="flex flex-col items-center gap-6 text-center">
             <div className="w-full">
-              <h3 className="text-lg font-semibold text-yellow-800">Reservation name required</h3>
-              <p className="mt-3 text-sm text-yellow-700 mx-auto max-w-[40ch]">Please provide a reservation name so we can hold your order. The name should be at least 2 characters.</p>
+              <h3 className="text-lg font-semibold text-yellow-800">Reservation details required</h3>
+              <p className="mt-3 text-sm text-yellow-700 mx-auto max-w-[48ch]">Please provide a reservation name and a valid phone number so we can hold your order and contact you when your stickers are ready for pickup.</p>
             </div>
 
             <div className="w-full flex justify-center mt-2">
               <div className="w-full max-w-lg px-4 sm:px-0">
                 <button onClick={() => {
                   setShowNoReservationModal(false);
-                  // navigate to Review (step 3) and highlight the reservation input
+                  // navigate to Review (step 3) and highlight/focus the first missing input
+                  const phoneRaw = (phoneNumber || '').replace(/\D/g, '');
+                  const phoneValid = /^09\d{9}$/.test(phoneRaw);
+                  const focusPhone = !phoneValid;
+                  const focusName = !reservationName || reservationName.trim().length < 2;
+
                   if (step !== 3) {
                     goToStep(3);
-                    // wait for the step to mount/animate, then highlight and focus
                     setTimeout(() => {
                       try {
+                        if (focusPhone) {
+                          const el = document.getElementById('phone-number-input');
+                          setHighlightPhone(true);
+                          if (el) {
+                            el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                            setTimeout(() => { try { (el as HTMLElement).focus(); } catch (e) { /* ignore */ }; setTimeout(() => setHighlightPhone(false), 1600); }, 300);
+                          } else setTimeout(() => setHighlightPhone(false), 1600);
+                        } else if (focusName) {
+                          const el = document.getElementById('reservation-name-input');
+                          setHighlightReservationName(true);
+                          if (el) {
+                            el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                            setTimeout(() => { try { (el as HTMLElement).focus(); } catch (e) { /* ignore */ }; setTimeout(() => setHighlightReservationName(false), 1600); }, 300);
+                          } else setTimeout(() => setHighlightReservationName(false), 1600);
+                        }
+                      } catch (e) { /* ignore */ }
+                    }, ANIM_MS + 40);
+                  } else {
+                    try {
+                      if (focusPhone) {
+                        const el = document.getElementById('phone-number-input');
+                        setHighlightPhone(true);
+                        if (el) {
+                          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                          setTimeout(() => { try { (el as HTMLElement).focus(); } catch (e) { /* ignore */ }; setTimeout(() => setHighlightPhone(false), 1600); }, 300);
+                        } else setTimeout(() => setHighlightPhone(false), 1600);
+                      } else if (focusName) {
                         const el = document.getElementById('reservation-name-input');
                         setHighlightReservationName(true);
                         if (el) {
                           el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                          setTimeout(() => {
-                            try { (el as HTMLElement).focus(); } catch (e) { /* ignore */ }
-                            setTimeout(() => setHighlightReservationName(false), 1600);
-                          }, 300);
-                        } else {
-                          setTimeout(() => setHighlightReservationName(false), 1600);
-                        }
-                      } catch (e) {
-                        // ignore
-                        setTimeout(() => setHighlightReservationName(false), 1600);
+                          setTimeout(() => { try { (el as HTMLElement).focus(); } catch (e) { /* ignore */ }; setTimeout(() => setHighlightReservationName(false), 1600); }, 300);
+                        } else setTimeout(() => setHighlightReservationName(false), 1600);
                       }
-                    }, ANIM_MS + 40);
-                  } else {
-                    // already on step 3 — just highlight
-                    try {
-                      const el = document.getElementById('reservation-name-input');
-                      setHighlightReservationName(true);
-                      if (el) {
-                        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                        setTimeout(() => {
-                          try { (el as HTMLElement).focus(); } catch (e) { /* ignore */ }
-                          setTimeout(() => setHighlightReservationName(false), 1600);
-                        }, 300);
-                      } else {
-                        setTimeout(() => setHighlightReservationName(false), 1600);
-                      }
-                    } catch (e) {
-                      // ignore
-                      setTimeout(() => setHighlightReservationName(false), 1600);
-                    }
+                    } catch (e) { /* ignore */ }
                   }
-                }} className="w-full px-4 py-2 rounded-md border bg-white">Enter name</button>
+                }} className="w-full px-4 py-2 rounded-md border bg-white">Enter details</button>
               </div>
             </div>
           </div>
@@ -1120,6 +1173,7 @@ export default function OrderFlow() {
             </div>
 
             <div className="text-sm text-gray-700">Reservation name: <span className="font-semibold">{reservationName}</span></div>
+            <div className="text-sm text-gray-700">Phone number: <span className="font-semibold">{phoneNumber || '—'}</span></div>
 
             <div className="mt-4 w-full">
               <div className="flex flex-col sm:flex-row gap-3 w-full">

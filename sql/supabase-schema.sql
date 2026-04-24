@@ -8,6 +8,7 @@ create table if not exists orders (
   id uuid default gen_random_uuid() primary key,
   qr_code text unique not null,
   full_name text not null,
+  phone_number text,
   deal_id text,
   deal_title text,
   total_price numeric,

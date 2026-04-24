@@ -18,6 +18,7 @@ type OrderRow = {
   id: string;
   qr_code?: string | null;
   full_name?: string | null;
+  phone_number?: string | null;
   deal_id?: string | null;
   deal_title?: string | null;
   total_price?: string | number | null;
@@ -284,7 +285,7 @@ export default function OrderPage({ order, files }: { order: OrderRow | null; fi
         {/* files list removed — preview modal will show the layout */}
         
         <div className="mt-6 grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-2 bg-white rounded-2xl p-6 shadow">
+          <div className="lg:col-span-2 bg-white rounded-2xl p-6 shadow order-last lg:order-first">
             <div className="flex items-center justify-between mb-4">
               <h3 className="font-semibold">Preview & Files</h3>
               <div className="flex flex-col sm:flex-row gap-2">
@@ -311,12 +312,14 @@ export default function OrderPage({ order, files }: { order: OrderRow | null; fi
             {/* files display removed per request */}
           </div>
 
-          <aside className="hidden lg:block bg-white rounded-2xl p-6 shadow">
+          <aside className="order-first lg:order-last bg-white rounded-2xl p-6 shadow">
             <div className="mb-4">
               <div className="text-sm text-gray-500">Customer</div>
               <div className="font-medium">{order.full_name}</div>
               <div className="text-sm text-gray-500 mt-3">Deal</div>
               <div className="font-medium">{order.deal_title}</div>
+              <div className="text-sm text-gray-500 mt-3">Phone</div>
+              <div className="font-medium">{order.phone_number || '-'}</div>
               <div className="text-sm text-gray-500 mt-3">Total</div>
               <div className="font-medium">{order.total_price ? `₱${order.total_price}` : '-'}</div>
               <div className="text-sm text-gray-500 mt-3">Created</div>

@@ -22,8 +22,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const supabaseAdmin = createClient(supabaseUrl, serviceRole);
 
   try {
-    const { reservationName, dealId, dealTitle, dealPrice, files, qrValue, deletePaths } = req.body as {
+    const { reservationName, phoneNumber, dealId, dealTitle, dealPrice, files, qrValue, deletePaths } = req.body as {
       reservationName: string;
+      phoneNumber?: string | null;
       dealId?: string;
       dealTitle?: string;
       dealPrice?: number;
@@ -32,28 +33,50 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       deletePaths?: string[];
     };
 
-    if (!reservationName || !qrValue) {
-      return res.status(400).json({ error: 'Missing required fields' });
+    // Require reservation name, QR code and phone number
+    const phoneRaw = (phoneNumber || '').replace(/\D/g, '');
+    if (!reservationName || !qrValue || !phoneRaw || !/^09\d{9}$/.test(phoneRaw)) {
+      return res.status(400).json({ error: 'Missing or invalid required fields' });
     }
 
-    // insert order
-    const { data: orderData, error: orderError } = await supabaseAdmin
-      .from('orders')
-      .insert([
-        {
-          qr_code: qrValue,
-          full_name: reservationName,
-          deal_id: dealId || null,
-          deal_title: dealTitle || null,
-          total_price: dealPrice ?? null,
-          status: 'pending',
-        },
-      ])
-      .select()
-      .single();
+    // insert order (try including phone_number; if the DB schema does not
+    // yet contain the `phone_number` column, retry without it so the
+    // request can still succeed until the migration is applied).
+    const baseRow: Record<string, any> = {
+      qr_code: qrValue,
+      full_name: reservationName,
+      deal_id: dealId || null,
+      deal_title: dealTitle || null,
+      total_price: dealPrice ?? null,
+      status: 'pending',
+    };
+    if (phoneRaw) baseRow.phone_number = phoneRaw;
 
-    if (orderError) {
-      console.error('order insert error', orderError);
+    let orderData: any = null;
+    // attempt insert, with a fallback if the `phone_number` column is missing
+    try {
+      const insertRes = await supabaseAdmin.from('orders').insert([baseRow]).select().single();
+      orderData = insertRes.data;
+      if (insertRes.error) {
+        const err = insertRes.error as any;
+        console.error('order insert error', err);
+        // detect PostgREST schema cache error indicating missing column
+        const isMissingPhoneCol = (err?.code === 'PGRST204') || (typeof err?.message === 'string' && err.message.includes('phone_number'));
+        if (isMissingPhoneCol && baseRow.phone_number) {
+          // retry without the phone_number field
+          delete baseRow.phone_number;
+          const retry = await supabaseAdmin.from('orders').insert([baseRow]).select().single();
+          if (retry.error) {
+            console.error('order insert retry error', retry.error);
+            return res.status(500).json({ error: 'Failed to create order' });
+          }
+          orderData = retry.data;
+        } else {
+          return res.status(500).json({ error: 'Failed to create order' });
+        }
+      }
+    } catch (e) {
+      console.error('order insert unexpected error', e);
       return res.status(500).json({ error: 'Failed to create order' });
     }
 

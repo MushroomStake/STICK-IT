@@ -136,8 +136,8 @@ export default function AdminIndex() {
 
         <div className="bg-white rounded-2xl p-6 shadow">
           <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 mb-4">
-            <div className="flex-1 w-full flex items-center gap-2">
-              <input placeholder="Search invoice or name" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') setSearch(searchTerm); }} className="w-full border rounded-lg px-4 py-2" />
+              <div className="flex-1 w-full flex items-center gap-2">
+              <input placeholder="Search name" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') setSearch(searchTerm); }} className="w-full border rounded-lg px-4 py-2" />
               {searchTerm && (
                 <button onClick={() => { setSearchTerm(''); setSearch(''); }} className="text-sm text-gray-500 px-2">Clear</button>
               )}

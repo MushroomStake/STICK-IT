@@ -25,9 +25,13 @@ interface FinalCheckProps {
   reservationName?: string;
   onReservationChange?: (v: string) => void;
   highlightReservationName?: boolean;
+  phoneNumber?: string;
+  onPhoneChange?: (v: string) => void;
+  highlightPhone?: boolean;
+  samplePhone?: string;
 }
 
-export default function FinalCheck({ deal, files, reservationName, onReservationChange, highlightReservationName = false }: FinalCheckProps) {
+export default function FinalCheck({ deal, files, reservationName, onReservationChange, highlightReservationName = false, phoneNumber, onPhoneChange, highlightPhone = false, samplePhone }: FinalCheckProps) {
 
   const totalStickers = files.reduce((s, f) => s + (f.quantity ?? 1), 0);
   const itemsPerSheet = 10;
@@ -58,6 +62,28 @@ export default function FinalCheck({ deal, files, reservationName, onReservation
             />
           </div>
         </div>
+      </div>
+
+      <div className="mb-6">
+        <label className="flex items-center justify-between mb-2">
+          <span className="font-semibold">PHONE NUMBER</span>
+          <span className="text-xs text-red-500">Required</span>
+        </label>
+        <div className="relative">
+          <div className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
+            <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6A19.79 19.79 0 0 1 2.08 4.18 2 2 0 0 1 4 2h3a2 2 0 0 1 2 1.72c.12 1.05.37 2.07.73 3.03a2 2 0 0 1-.45 2.11L8.91 10.09a16 16 0 0 0 6 6l1.23-1.23a2 2 0 0 1 2.11-.45c.96.36 1.98.61 3.03.73A2 2 0 0 1 22 16.92z"/></svg>
+          </div>
+          <input
+            id="phone-number-input"
+            value={phoneNumber ?? ''}
+            onChange={(e) => onPhoneChange?.(e.target.value)}
+            placeholder={samplePhone ?? '09*********'}
+            inputMode="numeric"
+            required
+            className={`w-full pl-12 pr-4 py-3 border rounded-md outline-none focus:ring-2 focus:ring-yellow-200 ${highlightPhone ? 'ring-4 ring-yellow-300 animate-pulse border-yellow-300' : ''}`}
+          />
+        </div>
+        <p className="text-xs text-gray-500 mt-2">Provide a phone number (e.g. {samplePhone ?? '09*********'}) so the branch can contact you when your stickers are ready for pickup.</p>
       </div>
 
       <div className="bg-[#FFF6E0] rounded-2xl p-6 shadow-sm mb-6 ring-1 ring-yellow-100">
