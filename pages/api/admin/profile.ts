@@ -75,7 +75,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         updated_at: new Date().toISOString(),
       } as any;
 
-      const { data, error } = await supabaseAdmin.from('admin_profiles').upsert(row, { onConflict: 'email', returning: 'representation' }).select().single();
+      const { data, error } = await supabaseAdmin.from('admin_profiles').upsert(row, { onConflict: 'email' }).select().maybeSingle();
       if (error) {
         console.error('profile upsert error', error);
         return res.status(500).json({ error: 'Profile update failed' });
