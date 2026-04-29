@@ -7,7 +7,7 @@ type Props = {
   directionsUrl?: string;
 };
 
-export default function ThankYouStep({ onBack, branchName = 'SM Mall of Asia', directionsUrl = 'https://www.google.com/maps/dir/?api=1&destination=SM%20Mall%20of%20Asia' }: Props) {
+export default function ThankYouStep({ onBack, branchName = 'Civic Center, Olongapo City', directionsUrl = 'https://maps.app.goo.gl/QToM1WmioBzZ3Fs97' }: Props) {
   const router = useRouter();
   const goHome = () => {
     if (onBack) return onBack();
@@ -27,7 +27,7 @@ export default function ThankYouStep({ onBack, branchName = 'SM Mall of Asia', d
           </div>
 
           <h2 className="text-2xl font-bold">Thank you for your purchase!</h2>
-          <p className="text-sm text-gray-500 mt-3">Your sticker reservation is confirmed. We've notified the branch to start preparing your prints.</p>
+          <p className="text-sm text-gray-500 mt-3">Your sticker reservation is confirmed. We've notified the stall to start preparing your prints.</p>
         </div>
       </div>
 
@@ -40,8 +40,8 @@ export default function ThankYouStep({ onBack, branchName = 'SM Mall of Asia', d
             </svg>
           </div>
           <div>
-            <div className="font-semibold">Need help finding the branch?</div>
-            <div className="text-sm text-gray-600 mt-1">Open the branch location in Google Maps to get directions to {branchName}.</div>
+            <div className="font-semibold">Need help finding the stall?</div>
+            <div className="text-sm text-gray-600 mt-1">Open the stall location in Google Maps to get directions to {branchName}.</div>
             <a href={directionsUrl} target="_blank" rel="noreferrer" className="inline-block mt-2 text-sm font-semibold text-yellow-600">Get Directions</a>
           </div>
         </div>

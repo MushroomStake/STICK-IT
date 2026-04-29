@@ -26,3 +26,15 @@ create table if not exists order_files (
   border boolean default false,
   created_at timestamptz default now()
 );
+
+-- Admin profiles: stores basic admin metadata
+create table if not exists admin_profiles (
+  id uuid default gen_random_uuid() primary key,
+  user_id uuid,
+  email text unique not null,
+  first_name text,
+  middle_name text,
+  last_name text,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);

@@ -108,16 +108,38 @@ export default function AdminIndex() {
   }
 
   function handleExport() {
-    const headers = ['Date & Time', 'Customer Name', 'Status', 'Deal', 'Price'];
-    const rows = orders.map(o => [formatDate(o.created_at), o.full_name || '', o.status || '', o.deal_title || '', o.total_price ?? '']);
-    const csv = [headers.join(','), ...rows.map(r => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(','))].join('\n');
-    const blob = new Blob([csv], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `stickit_orders_${Date.now()}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
+    (async () => {
+      try {
+        const qs = new URLSearchParams();
+        qs.set('status', statusFilter);
+        qs.set('promo', promoFilter);
+        if (search) qs.set('search', search);
+
+        const resp = await fetch(`/api/admin/export-orders?${qs.toString()}`);
+        if (!resp.ok) {
+          const txt = await resp.text().catch(() => null);
+          console.warn('export failed', resp.status, txt);
+          alert('Export failed');
+          return;
+        }
+
+        const ab = await resp.arrayBuffer();
+        const blob = new Blob([ab], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+        const dateStr = new Date().toISOString().slice(0, 10);
+        const filename = `stickit_orders_${statusFilter}_${dateStr}.xlsx`;
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+      } catch (e) {
+        console.warn('export failed', e);
+        alert('Export failed');
+      }
+    })();
   }
 
   return (

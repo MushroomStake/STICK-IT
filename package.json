@@ -15,8 +15,9 @@
     "react-dom": "^19.2.5",
     "react-konva": "^19.2.3"
     ,"jspdf": "^2.5.1",
-    "pdf-lib": "^1.17.1"
-    ,"sharp": "^0.32.4"
+    "xlsx": "^0.18.5",
+    "pdf-lib": "^1.17.1",
+    "sharp": "^0.32.4"
   },
   "dependenciesMeta": {
     "jspdf": {

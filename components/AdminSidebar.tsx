@@ -1,5 +1,6 @@
 import React from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/router';
 
 type Props = {
   open?: boolean;
@@ -7,6 +8,10 @@ type Props = {
 };
 
 export default function AdminSidebar({ open = false, onClose }: Props) {
+  const router = useRouter();
+  const rawPath = (router.asPath || '').split('?')[0];
+  const path = rawPath.replace(/\/$/, '') || '/';
+  const isActive = (p: string) => (p.replace(/\/$/, '') || '/') === path;
   const SidebarInner = (
     <>
       <Link href="/" className="flex items-center gap-3 mb-6">
@@ -15,15 +20,13 @@ export default function AdminSidebar({ open = false, onClose }: Props) {
       </Link>
 
       <nav className="flex-1 space-y-1">
-        <Link href="/admin" className="block px-3 py-2 rounded-lg bg-yellow-50 text-yellow-700 font-medium">Dashboard</Link>
-        <Link href="/admin/qr-scan" className="block px-3 py-2 rounded-lg text-gray-700">QR Scan</Link>
-        <Link href="#" className="block px-3 py-2 rounded-lg text-gray-700">Activity Log</Link>
-        <Link href="#" className="block px-3 py-2 rounded-lg text-gray-700">Profile</Link>
+        <Link href="/admin" onClick={() => onClose?.()} className={`${isActive('/admin') ? 'block px-3 py-2 rounded-lg bg-yellow-50 text-yellow-700 font-medium' : 'block px-3 py-2 rounded-lg text-gray-700'}`}>Dashboard</Link>
+        <Link href="/admin/qr-scan" onClick={() => onClose?.()} className={`${isActive('/admin/qr-scan') ? 'block px-3 py-2 rounded-lg bg-yellow-50 text-yellow-700 font-medium' : 'block px-3 py-2 rounded-lg text-gray-700'}`}>QR Scan</Link>
+        <Link href="/admin/profile" onClick={() => onClose?.()} className={`block px-3 py-2 rounded-lg text-gray-700`}>Profile</Link>
       </nav>
 
       <div className="mt-6">
-        <Link href="#" className="block px-3 py-2 rounded-lg text-gray-700">Settings</Link>
-        <Link href="/admin/login" className="block px-3 py-2 text-red-600 mt-2">Logout</Link>
+        <Link href="/admin/login" className="block px-3 py-2 text-red-600">Logout</Link>
       </div>
     </>
   );
