@@ -77,7 +77,7 @@ export default function UserHome() {
             <div className="p-6 bg-white rounded-2xl shadow text-center">
               <div className="mx-auto w-12 h-12 rounded-full bg-yellow-100 flex items-center justify-center text-yellow-600 font-bold">3</div>
               <h3 className="mt-4 font-medium">Delivery or Pickup</h3>
-              <p className="mt-2 text-sm text-gray-500">Choose door-to-door delivery or walk-in pickup at our store — fast and secure.</p>
+              <p className="mt-2 text-sm text-gray-500">walk-in pickup at our store — fast and secure.</p>
             </div>
           </div>
         </div>
