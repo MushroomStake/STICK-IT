@@ -21,7 +21,7 @@ export default function UserHome() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-center">
             <div>
               <h1 className="text-4xl md:text-5xl font-extrabold leading-tight">Make custom stickers — fast and affordably</h1>
-              <p className="mt-4 text-gray-600 max-w-xl">Upload your designs or use our simple editor to create high-quality vinyl stickers printed on durable material. Ready-to-ship within days.</p>
+              <p className="mt-4 text-gray-600 max-w-xl">Upload your designs or use our simple editor to create high-quality vinyl stickers printed on durable material.</p>
 
               <div className="mt-8 flex flex-col sm:flex-row gap-3">
                 <button onClick={goToCustomize} className="inline-flex items-center gap-3 bg-[#FFD600] hover:bg-[#ffdf33] text-black font-semibold px-6 py-3 rounded-full shadow-lg">
