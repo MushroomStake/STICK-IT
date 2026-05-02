@@ -20,7 +20,7 @@ export default function UserHome() {
         <div className="max-w-7xl mx-auto px-6 py-16">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-center">
             <div>
-              <h1 className="text-4xl md:text-5xl font-extrabold leading-tight">Make custom stickers — fast and affordably</h1>
+              <h1 className="text-4xl md:text-5xl font-extrabold leading-tight">Make custom stickers — fast and affordable</h1>
               <p className="mt-4 text-gray-600 max-w-xl">Upload your designs or use our simple editor to create high-quality vinyl stickers printed on durable material.</p>
 
               <div className="mt-8 flex flex-col sm:flex-row gap-3">
@@ -66,18 +66,19 @@ export default function UserHome() {
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
             <div className="p-6 bg-white rounded-2xl shadow text-center">
               <div className="mx-auto w-12 h-12 rounded-full bg-yellow-100 flex items-center justify-center text-yellow-600 font-bold">1</div>
-              <h3 className="mt-4 font-medium">Upload or design</h3>
-              <p className="mt-2 text-sm text-gray-500">Upload your artwork or use our built-in editor to create your sticker.</p>
-            </div>
-            <div className="p-6 bg-white rounded-2xl shadow text-center">
-              <div className="mx-auto w-12 h-12 rounded-full bg-yellow-100 flex items-center justify-center text-yellow-600 font-bold">2</div>
               <h3 className="mt-4 font-medium">Choose pack</h3>
               <p className="mt-2 text-sm text-gray-500">Pick from 10/20/30 packs—affordable pricing and fast printing.</p>
             </div>
             <div className="p-6 bg-white rounded-2xl shadow text-center">
+              <div className="mx-auto w-12 h-12 rounded-full bg-yellow-100 flex items-center justify-center text-yellow-600 font-bold">2</div>
+              <h3 className="mt-4 font-medium">Upload or design</h3>
+              <p className="mt-2 text-sm text-gray-500">
+                Upload your artwork or use our built-in editor to create your sticker.</p>
+            </div>
+            <div className="p-6 bg-white rounded-2xl shadow text-center">
               <div className="mx-auto w-12 h-12 rounded-full bg-yellow-100 flex items-center justify-center text-yellow-600 font-bold">3</div>
-              <h3 className="mt-4 font-medium">Delivery or Pickup</h3>
-              <p className="mt-2 text-sm text-gray-500">walk-in pickup at our store — fast and secure.</p>
+              <h3 className="mt-4 font-medium">Pickup your order</h3>
+              <p className="mt-2 text-sm text-gray-500">walk-in pickup at our stall — fast and secure.</p>
             </div>
           </div>
         </div>
